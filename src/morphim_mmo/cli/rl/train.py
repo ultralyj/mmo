@@ -10,6 +10,7 @@ from ...rl.config import load_residual_rl_config
 from ...rl.environment import MorphometricResidualEnv, ResidualActionWrapper
 from ...rl.ppo import PPOTrainer
 from ...rl.reference import ResidualRLReference
+from ...rl.visualization import render_policy_gif
 
 
 def main() -> None:
@@ -50,6 +51,14 @@ def main() -> None:
     parser.add_argument("--total-timesteps", type=int)
     parser.add_argument("--sim-backend", default="auto")
     parser.add_argument("--checkpoint-interval", type=int, default=10)
+    parser.add_argument(
+        "--gif-interval",
+        type=int,
+        default=5,
+        help="render one diagnostic policy GIF every N PPO iterations; 0 disables",
+    )
+    parser.add_argument("--gif-frame-stride", type=int, default=4)
+    parser.add_argument("--gif-fps", type=float, default=15.0)
     args = parser.parse_args()
 
     config = load_residual_rl_config(args.config)
@@ -80,12 +89,43 @@ def main() -> None:
         sim_backend=args.sim_backend,
     )
     environment = ResidualActionWrapper(environment)
+    render_environment = None
+    visualization_callback = None
+    if args.gif_interval > 0:
+        render_environment = ResidualActionWrapper(
+            MorphometricResidualEnv(
+                reference=reference,
+                config=config,
+                num_envs=1,
+                sim_backend=args.sim_backend,
+                render_mode="rgb_array",
+            )
+        )
+
+        def visualization_callback(policy, iteration, output_path):
+            """Render the current deterministic policy in an isolated scene."""
+
+            render_policy_gif(
+                policy,
+                render_environment,
+                output_path,
+                fps=args.gif_fps,
+                frame_stride=args.gif_frame_stride,
+                seed=config.ppo.seed,
+            )
+
     trainer = PPOTrainer(environment, config.ppo)
-    trainer.train(
-        output_dir=args.output_dir,
-        checkpoint_interval=args.checkpoint_interval,
-    )
-    environment.close()
+    try:
+        trainer.train(
+            output_dir=args.output_dir,
+            checkpoint_interval=args.checkpoint_interval,
+            visualization_interval=args.gif_interval,
+            visualization_callback=visualization_callback,
+        )
+    finally:
+        environment.close()
+        if render_environment is not None:
+            render_environment.close()
 
 if __name__ == "__main__":
     main()

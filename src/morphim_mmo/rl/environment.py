@@ -14,6 +14,8 @@ import yourdfpy
 from pyroki.collision import RobotCollision
 
 from mani_skill.envs.sapien_env import BaseEnv
+from mani_skill.sensors.camera import CameraConfig
+from mani_skill.utils import sapien_utils
 from mani_skill.utils.structs.pose import Pose
 from mani_skill.utils.structs.types import SimConfig
 
@@ -21,7 +23,7 @@ from .agent import WujiHand2Agent
 from .config import ResidualRLConfig
 from .observation import future_reference_window, privileged_teacher_observation
 from .reference import ResidualRLReference
-from .reward import average_distance_error, morphometric_reward, transform_object_points
+from .reward import average_distance_error, morphometric_reward
 from .termination import (
     TerminationState,
     termination_reasons,
@@ -48,6 +50,17 @@ class MorphometricResidualEnv(BaseEnv):
     SUPPORTED_ROBOTS = [WujiHand2Agent]
     agent: WujiHand2Agent
 
+    @property
+    def _default_human_render_camera_configs(self) -> CameraConfig:
+        """Return a camera framing the hand, apple, and tabletop."""
+
+        pose = sapien_utils.look_at(
+            eye=[0.48, -0.92, 0.38], target=[0.0, -0.47, 0.12]
+        )
+        return CameraConfig(
+            "render_camera", pose, 640, 480, 1.0, 0.01, 10.0
+        )
+
     def __init__(
         self,
         *,
@@ -64,6 +77,9 @@ class MorphometricResidualEnv(BaseEnv):
         self._position_offset: torch.Tensor | None = None
         self._yaw_offset: torch.Tensor | None = None
         self._object_anchor: torch.Tensor | None = None
+        self._root_pose_start: torch.Tensor | None = None
+        self._root_pose_target: torch.Tensor | None = None
+        self._root_substep = 0
         super().__init__(
             num_envs=num_envs,
             obs_mode="state",
@@ -187,7 +203,8 @@ class MorphometricResidualEnv(BaseEnv):
             load_meshes=False,
             load_collision_meshes=True,
         )
-        self._link_surface_points: list[tuple[Any, torch.Tensor]] = []
+        surface_links = []
+        surface_points = []
         for link_index, link in enumerate(self._robot_links):
             mesh = RobotCollision._get_trimesh_collision_geometries(
                 urdf, link.name
@@ -197,14 +214,12 @@ class MorphometricResidualEnv(BaseEnv):
             sampled, _ = trimesh.sample.sample_surface(
                 mesh, 16, seed=link_index
             )
-            self._link_surface_points.append(
-                (
-                    link,
-                    torch.as_tensor(
-                        sampled, dtype=torch.float32, device=device
-                    ),
-                )
+            surface_links.append(link)
+            surface_points.append(
+                torch.as_tensor(sampled, dtype=torch.float32, device=device)
             )
+        self._surface_links = tuple(surface_links)
+        self._link_surface_points = torch.stack(surface_points)
         prefixes = (
             "r_thumb",
             "r_index_finger",
@@ -276,6 +291,29 @@ class MorphometricResidualEnv(BaseEnv):
             half_size=(float(table_half[0]), float(table_half[1]), 0.01)
         )
         self.table = table_builder.build_static("table")
+        if self.scene.gpu_sim_enabled:
+            object_pairs = []
+            table_pairs = []
+            for link in self._robot_links:
+                object_pairs.extend(zip(link._bodies, self.object._bodies))
+                table_pairs.extend(zip(link._bodies, self.table._bodies))
+            self._object_contact_query = (
+                self.scene.px.gpu_create_contact_pair_impulse_query(object_pairs)
+            )
+            self._table_contact_query = (
+                self.scene.px.gpu_create_contact_pair_impulse_query(table_pairs)
+            )
+            link_to_index = {
+                link.name: index for index, link in enumerate(self._robot_links)
+            }
+            self._finger_link_indices = tuple(
+                torch.as_tensor(
+                    [link_to_index[link.name] for link in links],
+                    dtype=torch.int64,
+                    device=device,
+                )
+                for links in self._finger_links
+            )
 
     def _transformed_pose(
         self,
@@ -331,38 +369,82 @@ class MorphometricResidualEnv(BaseEnv):
         return self._transformed_pose(pose, env_idx)
 
     def _contact_state(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        finger_contact = torch.zeros(
-            (self.num_envs, len(self._finger_links)),
-            dtype=torch.bool,
-            device=self.device,
-        )
-        maximum_object_force = torch.zeros(self.num_envs, device=self.device)
-        for finger_index, links in enumerate(self._finger_links):
-            for link in links:
-                force = self.scene.get_pairwise_contact_forces(link, self.object)
-                force_norm = torch.linalg.vector_norm(force, dim=-1)
-                finger_contact[:, finger_index] |= (
-                    force_norm > self.config.reward.contact_force_threshold_n
-                )
-                maximum_object_force = torch.maximum(
-                    maximum_object_force, force_norm
+        if self.scene.gpu_sim_enabled:
+            link_count = len(self._robot_links)
+            self.scene.px.gpu_query_contact_pair_impulses(
+                self._object_contact_query
+            )
+            object_forces = (
+                self._object_contact_query.cuda_impulses.torch()
+                .clone()
+                .reshape(link_count, self.num_envs, 3)
+                .transpose(0, 1)
+                / self.scene.px.timestep
+            )
+            object_force_norm = torch.linalg.vector_norm(object_forces, dim=-1)
+            finger_contact = torch.stack(
+                [
+                    object_force_norm[:, indices].amax(dim=-1)
+                    > self.config.reward.contact_force_threshold_n
+                    for indices in self._finger_link_indices
+                ],
+                dim=-1,
+            )
+            maximum_object_force = object_force_norm.amax(dim=-1)
+
+            self.scene.px.gpu_query_contact_pair_impulses(
+                self._table_contact_query
+            )
+            table_forces = (
+                self._table_contact_query.cuda_impulses.torch()
+                .clone()
+                .reshape(link_count, self.num_envs, 3)
+                .transpose(0, 1)
+                / self.scene.px.timestep
+            )
+            table_force = torch.linalg.vector_norm(
+                table_forces, dim=-1
+            ).amax(dim=-1)
+        else:
+            finger_contact = torch.zeros(
+                (self.num_envs, len(self._finger_links)),
+                dtype=torch.bool,
+                device=self.device,
+            )
+            maximum_object_force = torch.zeros(self.num_envs, device=self.device)
+            for finger_index, links in enumerate(self._finger_links):
+                for link in links:
+                    force = self.scene.get_pairwise_contact_forces(link, self.object)
+                    force_norm = torch.linalg.vector_norm(force, dim=-1)
+                    finger_contact[:, finger_index] |= (
+                        force_norm > self.config.reward.contact_force_threshold_n
+                    )
+                    maximum_object_force = torch.maximum(
+                        maximum_object_force, force_norm
+                    )
+            table_force = torch.zeros(self.num_envs, device=self.device)
+            for link in self._robot_links:
+                force = self.scene.get_pairwise_contact_forces(link, self.table)
+                table_force = torch.maximum(
+                    table_force, torch.linalg.vector_norm(force, dim=-1)
                 )
 
-        table_force = torch.zeros(self.num_envs, device=self.device)
-        for link in self._robot_links:
-            force = self.scene.get_pairwise_contact_forces(link, self.table)
-            table_force = torch.maximum(
-                table_force, torch.linalg.vector_norm(force, dim=-1)
-            )
-        surface_heights = []
-        for link, local_points in self._link_surface_points:
-            pose = link.pose.raw_pose
-            surface_heights.append(
-                transform_object_points(
-                    local_points, pose[:, :3], pose[:, 3:]
-                )[..., 2].min(dim=-1).values
-            )
-        minimum_height = torch.stack(surface_heights, dim=-1).min(dim=-1).values
+        poses = torch.stack(
+            [link.pose.raw_pose for link in self._surface_links], dim=1
+        )
+        points = self._link_surface_points[None]
+        quaternion = poses[..., 3:]
+        quaternion = quaternion / torch.linalg.vector_norm(
+            quaternion, dim=-1, keepdim=True
+        ).clamp_min(1e-12)
+        vector = quaternion[..., None, 1:]
+        first_cross = torch.linalg.cross(vector, points, dim=-1)
+        rotated = points + 2.0 * (
+            quaternion[..., None, :1] * first_cross
+            + torch.linalg.cross(vector, first_cross, dim=-1)
+        )
+        world_points = rotated + poses[..., None, :3]
+        minimum_height = world_points[..., 2].amin(dim=(-1, -2))
         return finger_contact, maximum_object_force, table_force, minimum_height
 
     def _task_metrics(self, step: torch.Tensor) -> dict[str, torch.Tensor]:
@@ -445,6 +527,8 @@ class MorphometricResidualEnv(BaseEnv):
         self.agent.robot.root_pose = Pose.create_from_pq(
             p=root_pose[:, :3], q=root_pose[:, 3:]
         )
+        self._root_pose_start = root_pose.clone()
+        self._root_pose_target = root_pose.clone()
         self.agent.robot.set_qpos(start_qpos)
         self.agent.robot.set_qvel(
             torch.zeros(
@@ -463,10 +547,10 @@ class MorphometricResidualEnv(BaseEnv):
 
     def _before_control_step(self) -> None:
         self._active_step = self._reference_step.clone()
-        root_pose = self._base_pose_for_step(self._active_step)
-        self.agent.robot.root_pose = Pose.create_from_pq(
-            p=root_pose[:, :3], q=root_pose[:, 3:]
-        )
+        self._root_pose_start = self.agent.robot.root_pose.raw_pose.clone()
+        self._root_pose_target = self._base_pose_for_step(self._active_step)
+        self._root_substep = 0
+
         if self.config.randomization.enabled:
             external_force = torch.empty(
                 (self.num_envs, 3), device=self.device
@@ -482,6 +566,32 @@ class MorphometricResidualEnv(BaseEnv):
                         force=external_force[body_index].detach().cpu().numpy(),
                         point=(body.pose * body.cmass_local_pose).p,
                     )
+
+    def _before_simulation_step(self) -> None:
+        """Interpolate the kinematic wrist at the physics simulation rate."""
+
+        self._root_substep += 1
+        fraction = self._root_substep / self._sim_steps_per_control
+        start = self._root_pose_start
+        target = self._root_pose_target
+        position = torch.lerp(start[:, :3], target[:, :3], fraction)
+        start_quaternion = start[:, 3:]
+        target_quaternion = target[:, 3:]
+        target_quaternion = torch.where(
+            (start_quaternion * target_quaternion).sum(dim=-1, keepdim=True) < 0,
+            -target_quaternion,
+            target_quaternion,
+        )
+        quaternion = torch.nn.functional.normalize(
+            torch.lerp(start_quaternion, target_quaternion, fraction), dim=-1
+        )
+        root_pose = torch.cat([position, quaternion], dim=-1)
+        self.agent.robot.root_pose = Pose.create_from_pq(
+            p=root_pose[:, :3], q=root_pose[:, 3:]
+        )
+        if self.scene.gpu_sim_enabled:
+            # Root-pose writes occur after BaseEnv's controller-target upload.
+            self.scene.px.gpu_apply_articulation_root_pose()
 
     def _after_control_step(self) -> None:
         metrics = self._task_metrics(self._active_step)

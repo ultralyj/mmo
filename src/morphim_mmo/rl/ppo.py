@@ -6,7 +6,7 @@ import json
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import torch
 from torch import nn
@@ -303,6 +303,9 @@ class PPOTrainer:
         *,
         output_dir: str | Path,
         checkpoint_interval: int = 10,
+        visualization_interval: int = 0,
+        visualization_callback: Callable[[ActorCritic, int, Path], None]
+        | None = None,
     ) -> list[dict[str, float]]:
         output = Path(output_dir)
         output.mkdir(parents=True, exist_ok=True)
@@ -595,6 +598,14 @@ class PPOTrainer:
             )
 
             iteration += 1
+            if (
+                visualization_callback is not None
+                and visualization_interval > 0
+                and iteration % visualization_interval == 0
+            ):
+                gif_path = output / "gifs" / f"policy-{iteration:06d}.gif"
+                visualization_callback(self.policy, iteration, gif_path)
+                print(f"  Saved policy GIF: {gif_path}", flush=True)
             if (
                 iteration
                 % checkpoint_interval
