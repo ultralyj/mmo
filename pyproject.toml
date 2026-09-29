@@ -11,6 +11,7 @@ dependencies = [
   "chumpy>=0.70",
   "jax[cuda13]>=0.6",
   "jaxls",
+  "mani-skill>=3.0.1",
   "matplotlib>=3.11.2",
   "numpy>=2.0",
   "pyrender>=0.1.45",
