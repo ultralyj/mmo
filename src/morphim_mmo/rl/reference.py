@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 from scipy.spatial.transform import Rotation
+import trimesh
 
 from ..data.contact import table_top_heights
 from ..models.configuration import finger_specs_from_config
@@ -53,12 +54,22 @@ def _reference_finger_contacts(
     contact_indices: np.ndarray,
     vertex_labels: np.ndarray,
     finger_count: int,
+    detected_contact_counts: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Convert ragged human contact vertices into per-finger Boolean states."""
+    """Convert ragged human contacts into per-finger Boolean states.
+
+    Some preprocessed GRAB files pad empty frames with nearest-contact vertex
+    indices.  ``detected_contact_counts`` distinguishes those padding entries
+    from genuine detected contacts.
+    """
 
     frame_count = len(contact_offsets) - 1
+    if detected_contact_counts is not None and len(detected_contact_counts) != frame_count:
+        raise ValueError("detected contact counts must have one entry per frame")
     states = np.zeros((frame_count, finger_count), dtype=np.bool_)
     for frame in range(frame_count):
+        if detected_contact_counts is not None and detected_contact_counts[frame] <= 0:
+            continue
         start, stop = int(contact_offsets[frame]), int(contact_offsets[frame + 1])
         labels = vertex_labels[contact_indices[start:stop]]
         valid = labels[labels >= 0]
@@ -78,6 +89,8 @@ class ResidualRLReference:
     object_pose_position_wxyz: np.ndarray
     reference_contact: np.ndarray
     table_height_m: np.ndarray
+    table_center_xy_m: np.ndarray
+    table_half_extents_xy_m: np.ndarray
     object_points_local_m: np.ndarray
     object_mesh_path: Path
     world_translation_m: np.ndarray
@@ -112,6 +125,8 @@ class ResidualRLReference:
         if not np.allclose(robot["timestamp_s"], contacts["timestamp_s"]):
             raise ValueError("robot and contact timestamps are not synchronized")
 
+        robot_joint_names = tuple(str(name) for name in robot["joint_names"])
+
         table_heights = table_top_heights(
             contacts["table_vertices_local_m"], contacts["table_to_world"]
         ).astype(np.float32)
@@ -132,23 +147,41 @@ class ResidualRLReference:
             contacts["contact_indices"],
             vertex_labels,
             len(config["fingers"]),
+            contacts["detected_contact_counts"]
+            if "detected_contact_counts" in contacts
+            else None,
         )
-        vertices = np.asarray(contacts["object_vertices_local_m"], dtype=np.float32)
         if object_point_count <= 0:
             raise ValueError("object_point_count must be positive")
-        sample_indices = np.linspace(
-            0, len(vertices) - 1, min(object_point_count, len(vertices)), dtype=np.int32
+        mesh = trimesh.load_mesh(object_mesh_path, process=False)
+        if not isinstance(mesh, trimesh.Trimesh):
+            mesh = trimesh.util.concatenate(tuple(mesh.geometry.values()))
+        object_points, _ = trimesh.sample.sample_surface(
+            mesh, object_point_count, seed=0
         )
+        table_vertices = np.asarray(contacts["table_vertices_local_m"])
+        table_transform = np.asarray(contacts["table_to_world"])[0]
+        table_world = (
+            table_vertices @ table_transform[:3, :3].T
+            + table_transform[:3, 3]
+            + world_translation
+        )
+        table_min = table_world[:, :2].min(axis=0)
+        table_max = table_world[:, :2].max(axis=0)
         selected = np.arange(0, len(robot["timestamp_s"]), reference_stride)
         return cls(
             timestamp_s=np.asarray(robot["timestamp_s"])[selected],
-            joint_names=tuple(str(name) for name in robot["joint_names"]),
-            qpos=np.asarray(robot["joint_positions_rad"], dtype=np.float32)[selected],
+            joint_names=robot_joint_names,
+            qpos=np.asarray(
+                robot["joint_positions_rad"], dtype=np.float32
+            )[selected],
             base_pose_position_wxyz=base_pose[selected],
             object_pose_position_wxyz=object_pose[selected],
             reference_contact=reference_contact[selected],
             table_height_m=(table_heights + world_translation[2])[selected],
-            object_points_local_m=vertices[sample_indices],
+            table_center_xy_m=((table_min + table_max) / 2).astype(np.float32),
+            table_half_extents_xy_m=((table_max - table_min) / 2).astype(np.float32),
+            object_points_local_m=np.asarray(object_points, dtype=np.float32),
             object_mesh_path=Path(object_mesh_path).resolve(),
             world_translation_m=world_translation,
         )

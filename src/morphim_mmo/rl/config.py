@@ -54,6 +54,17 @@ class PhysicsConfig:
 
 
 @dataclass(frozen=True)
+class RandomizationConfig:
+    """Initial domain-randomization settings from paper Section V."""
+
+    enabled: bool
+    object_position_range_m: float
+    object_yaw_range_rad: float
+    random_start: bool
+    external_force_range_n: float
+
+
+@dataclass(frozen=True)
 class PPOConfig:
     """PPO reproduction assumptions absent from the available paper text."""
 
@@ -81,6 +92,7 @@ class ResidualRLConfig:
     termination: TerminationConfig
     control: ControlConfig
     physics: PhysicsConfig
+    randomization: RandomizationConfig
     ppo: PPOConfig
 
 
@@ -102,7 +114,14 @@ def load_residual_rl_config(path: str | Path) -> ResidualRLConfig:
 
     with Path(path).open("r", encoding="utf-8") as stream:
         values = yaml.safe_load(stream)
-    expected = {"reward", "termination", "control", "physics", "ppo"}
+    expected = {
+        "reward",
+        "termination",
+        "control",
+        "physics",
+        "randomization",
+        "ppo",
+    }
     unknown = set(values) - expected
     missing = expected - set(values)
     if unknown or missing:
@@ -119,5 +138,8 @@ def load_residual_rl_config(path: str | Path) -> ResidualRLConfig:
         ),
         control=_construct_dataclass(ControlConfig, values["control"]),
         physics=_construct_dataclass(PhysicsConfig, values["physics"]),
+        randomization=_construct_dataclass(
+            RandomizationConfig, values["randomization"]
+        ),
         ppo=_construct_dataclass(PPOConfig, ppo_values),
     )

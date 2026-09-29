@@ -38,6 +38,7 @@ morphim-render-paper-style = "morphim_mmo.cli.rendering.render_paper_style:main"
 morphim-render-contacts = "morphim_mmo.cli.rendering.render_contact_matching:main"
 morphim-render-contact-gif = "morphim_mmo.cli.rendering.render_contact_gif:main"
 morphim-render-robot-pose = "morphim_mmo.cli.rendering.render_robot_pose:main"
+morphim-train-residual-rl = "morphim_mmo.cli.rl.train:main"
 
 [dependency-groups]
 dev = ["pytest>=8.3"]

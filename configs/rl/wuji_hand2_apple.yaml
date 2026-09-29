@@ -32,6 +32,17 @@ physics:
   hand_friction: 1.0
   table_friction: 0.8
 
+randomization:
+  # The paper specifies a 10 cm x 10 cm initial-position region and +/-15 deg yaw.
+  # Disabled until the deterministic hand-only pipeline is verified.
+  enabled: false
+  object_position_range_m: 0.05
+  object_yaw_range_rad: 0.2617993878
+  random_start: false
+  # The paper does not publish the external-force magnitude. This small value is
+  # a conservative reproduction assumption for the first debugging stage.
+  external_force_range_n: 0.0
+
 ppo:
   seed: 1
   num_envs: 128
