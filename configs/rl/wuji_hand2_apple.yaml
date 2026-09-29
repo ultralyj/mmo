@@ -13,7 +13,9 @@ termination:
   ema_decay: 0.95
   add_ema_threshold_m: 0.08
   contact_mismatch_ema_threshold: 0.8
-  maximum_contact_force_n: 50.0
+  # The zero-residual reference peaks near 48 N. Leave exploration headroom
+  # during the deterministic debugging stage.
+  maximum_contact_force_n: 100.0
   table_collision_force_n: 1.0
 
 control:
@@ -25,6 +27,14 @@ control:
   stiffness: 200.0
   damping: 10.0
   force_limit: 5.0
+  # Robot-specific contact preshape found by batched dynamics validation. The
+  # raw MMO skeleton trajectory makes contact but cannot form force closure.
+  # This bias is activated shortly before >=3-finger reference contact and is
+  # still refined by the policy's bounded residual action.
+  grasp_bias_rad: [0.1844, 0.1412, -0.1116, -0.2255, 0.1707, 0.1717, -0.1681, -0.1978, 0.2231, -0.0573, -0.1885, 0.1079, 0.0926, 0.1236, -0.1666, -0.1504, 0.0524, 0.2307, 0.2493, -0.0174]
+  grasp_contact_lookahead_steps: 20
+  grasp_min_contact_fingers: 3
+  grasp_release_decay: 0.9
 
 physics:
   object_mass_kg: 0.15
@@ -45,8 +55,8 @@ randomization:
 
 ppo:
   seed: 1
-  num_envs: 128
-  rollout_steps: 256
+  num_envs: 512
+  rollout_steps: 128
   total_timesteps: 5000000
   learning_rate: 0.0003
   gamma: 0.99
@@ -58,3 +68,5 @@ ppo:
   update_epochs: 4
   minibatches: 8
   hidden_sizes: [256, 256]
+  # Start close to the MMO reference: 0.25 * exp(-2) ~= 0.034 rad.
+  initial_log_std: -2.0

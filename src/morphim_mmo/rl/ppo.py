@@ -57,6 +57,7 @@ class ActorCritic(nn.Module):
         action_dim: int,
         hidden_sizes: tuple[int, ...],
         action_limit: torch.Tensor,
+        initial_log_std: float = -2.0,
     ) -> None:
         super().__init__()
         policy_layers: list[nn.Module] = []
@@ -69,7 +70,9 @@ class ActorCritic(nn.Module):
         self.policy_body = nn.Sequential(*policy_layers)
         self.policy_mean = nn.Linear(previous, action_dim)
         _orthogonal(self.policy_mean, gain=0.01)
-        self.policy_log_std = nn.Parameter(torch.full((action_dim,), -0.5))
+        self.policy_log_std = nn.Parameter(
+            torch.full((action_dim,), initial_log_std)
+        )
         self.register_buffer("action_limit", action_limit.clone())
 
         value_layers: list[nn.Module] = []
@@ -166,6 +169,7 @@ class PPOTrainer:
             action_dim,
             config.hidden_sizes,
             action_limit,
+            config.initial_log_std,
         ).to(self.device)
         self.optimizer = torch.optim.Adam(
             self.policy.parameters(), lr=config.learning_rate
@@ -375,7 +379,11 @@ class PPOTrainer:
             completed_episodes = 0
             successful_episodes = 0
             reference_end_episodes = 0
+            completed_step_sum = 0.0
             termination_counts = {key: 0 for key in _TERMINATION_REASON_KEYS}
+            termination_step_sums = {
+                key: 0.0 for key in _TERMINATION_REASON_KEYS
+            }
             diagnostic_maxima = {
                 "max_add_ema_m": 0.0,
                 "max_contact_mismatch_ema": 0.0,
@@ -416,6 +424,10 @@ class PPOTrainer:
 
                 done = terminated | truncated
                 completed_episodes += int(done.sum().item())
+                if "reference_step" in info:
+                    completed_step_sum += float(
+                        (info["reference_step"][done] + 1).sum().item()
+                    )
                 reference_end_episodes += int(
                     (truncated & ~terminated).sum().item()
                 )
@@ -423,9 +435,14 @@ class PPOTrainer:
                     successful_episodes += int((info["success"] & done).sum().item())
                 for key in _TERMINATION_REASON_KEYS:
                     if key in info:
-                        termination_counts[key] += int(
-                            (info[key] & terminated).sum().item()
-                        )
+                        reason_mask = info[key] & terminated
+                        termination_counts[key] += int(reason_mask.sum().item())
+                        if "reference_step" in info:
+                            termination_step_sums[key] += float(
+                                (info["reference_step"][reason_mask] + 1)
+                                .sum()
+                                .item()
+                            )
                 diagnostic_sources = {
                     "max_add_ema_m": "add_ema",
                     "max_contact_mismatch_ema": "contact_mismatch_ema",
@@ -516,8 +533,16 @@ class PPOTrainer:
             metrics["completed_episodes"] = float(completed_episodes)
             metrics["successful_episodes"] = float(successful_episodes)
             metrics["reference_end_episodes"] = float(reference_end_episodes)
+            metrics["mean_completed_episode_step"] = (
+                completed_step_sum / completed_episodes
+                if completed_episodes
+                else 0.0
+            )
             for key, count in termination_counts.items():
                 metrics[f"{key}_count"] = float(count)
+                metrics[f"{key}_mean_step"] = (
+                    termination_step_sums[key] / count if count else 0.0
+                )
             metrics.update(diagnostic_maxima)
             metrics["min_table_clearance_m"] = (
                 minimum_table_clearance
@@ -582,6 +607,8 @@ class PPOTrainer:
                 f"completed={completed_episodes} | "
                 f"reference_end={reference_end_episodes} | "
                 f"success={successful_episodes} | "
+                f"mean_end_step="
+                f"{metrics['mean_completed_episode_step']:.1f} | "
                 + " | ".join(
                     f"{key.removeprefix('terminate_')}={count}"
                     for key, count in termination_counts.items()
@@ -598,19 +625,12 @@ class PPOTrainer:
             )
 
             iteration += 1
-            if (
+            visualization_due = (
                 visualization_callback is not None
                 and visualization_interval > 0
                 and iteration % visualization_interval == 0
-            ):
-                gif_path = output / "gifs" / f"policy-{iteration:06d}.gif"
-                visualization_callback(self.policy, iteration, gif_path)
-                print(f"  Saved policy GIF: {gif_path}", flush=True)
-            if (
-                iteration
-                % checkpoint_interval
-                == 0
-            ):
+            )
+            if iteration % checkpoint_interval == 0 or visualization_due:
                 checkpoint_path = (
                     output
                     / (
@@ -633,6 +653,18 @@ class PPOTrainer:
                     f"{checkpoint_path}",
                     flush=True,
                 )
+            if visualization_due:
+                gif_path = output / "gifs" / f"policy-{iteration:06d}.gif"
+                try:
+                    visualization_callback(self.policy, iteration, gif_path)
+                except Exception as error:
+                    print(
+                        f"  WARNING: policy GIF failed at iteration "
+                        f"{iteration}: {error}",
+                        flush=True,
+                    )
+                else:
+                    print(f"  Saved policy GIF: {gif_path}", flush=True)
 
         final_checkpoint = (
             output / "checkpoint-final.pt"

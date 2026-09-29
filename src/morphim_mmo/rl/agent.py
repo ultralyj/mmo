@@ -19,7 +19,9 @@ class WujiHand2Agent(BaseAgent):
         / "assets/wuji-description/hand2/hand2_beta2/body/urdf/right.urdf"
     )
     fix_root_link = True
-    disable_self_collisions = False
+    # SAPIEN's per-pair filters are not replicated reliably across batched GPU
+    # articulations. MMO IK already enforces self-collision-free references.
+    disable_self_collisions = True
 
     def __init__(
         self,

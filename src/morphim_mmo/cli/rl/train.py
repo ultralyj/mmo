@@ -49,6 +49,11 @@ def main() -> None:
     parser.add_argument("--num-envs", type=int)
     parser.add_argument("--rollout-steps", type=int)
     parser.add_argument("--total-timesteps", type=int)
+    parser.add_argument(
+        "--initial-log-std",
+        type=float,
+        help="override the initial Gaussian policy log standard deviation",
+    )
     parser.add_argument("--sim-backend", default="auto")
     parser.add_argument("--checkpoint-interval", type=int, default=10)
     parser.add_argument(
@@ -69,6 +74,8 @@ def main() -> None:
         overrides["rollout_steps"] = args.rollout_steps
     if args.total_timesteps is not None:
         overrides["total_timesteps"] = args.total_timesteps
+    if args.initial_log_std is not None:
+        overrides["initial_log_std"] = args.initial_log_std
     if overrides:
         config = replace(
             config, ppo=replace(config.ppo, **overrides)
@@ -97,7 +104,8 @@ def main() -> None:
                 reference=reference,
                 config=config,
                 num_envs=1,
-                sim_backend=args.sim_backend,
+                # Keep rendering isolated from the batched GPU PhysX scene.
+                sim_backend="cpu",
                 render_mode="rgb_array",
             )
         )

@@ -41,6 +41,10 @@ class ControlConfig:
     stiffness: float
     damping: float
     force_limit: float
+    grasp_bias_rad: tuple[float, ...]
+    grasp_contact_lookahead_steps: int
+    grasp_min_contact_fingers: int
+    grasp_release_decay: float
 
 
 @dataclass(frozen=True)
@@ -82,6 +86,7 @@ class PPOConfig:
     update_epochs: int
     minibatches: int
     hidden_sizes: tuple[int, ...]
+    initial_log_std: float
 
 
 @dataclass(frozen=True)
@@ -131,12 +136,14 @@ def load_residual_rl_config(path: str | Path) -> ResidualRLConfig:
         )
     ppo_values = dict(values["ppo"])
     ppo_values["hidden_sizes"] = tuple(ppo_values["hidden_sizes"])
+    control_values = dict(values["control"])
+    control_values["grasp_bias_rad"] = tuple(control_values["grasp_bias_rad"])
     return ResidualRLConfig(
         reward=_construct_dataclass(RewardConfig, values["reward"]),
         termination=_construct_dataclass(
             TerminationConfig, values["termination"]
         ),
-        control=_construct_dataclass(ControlConfig, values["control"]),
+        control=_construct_dataclass(ControlConfig, control_values),
         physics=_construct_dataclass(PhysicsConfig, values["physics"]),
         randomization=_construct_dataclass(
             RandomizationConfig, values["randomization"]

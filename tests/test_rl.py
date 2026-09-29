@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+import trimesh
 
+from morphim_mmo.rl.environment import _grasp_bias_activation, _mesh_mass_properties
 from morphim_mmo.rl.ppo import ActorCritic, _single_env_action_limit
 from morphim_mmo.rl.reference import _reference_finger_contacts
 
@@ -56,3 +58,34 @@ def test_vectorized_action_bounds_reduce_to_one_environment() -> None:
 
     assert limit.shape == (20,)
     torch.testing.assert_close(limit, torch.full((20,), 0.25))
+
+
+def test_mesh_mass_properties_use_mesh_center_and_principal_inertia() -> None:
+    """Object dynamics should use its watertight mesh rather than a box proxy."""
+
+    mesh = trimesh.creation.box(extents=(0.08, 0.10, 0.12))
+    mesh.apply_translation((0.01, -0.02, 0.03))
+
+    center, inertia, quaternion = _mesh_mass_properties(mesh, mass_kg=0.15)
+
+    np.testing.assert_allclose(center, (0.01, -0.02, 0.03), atol=1e-7)
+    expected = np.sort(
+        0.15
+        / 12.0
+        * np.array((0.10**2 + 0.12**2, 0.08**2 + 0.12**2, 0.08**2 + 0.10**2))
+    )
+    np.testing.assert_allclose(np.sort(inertia), expected, rtol=1e-6)
+    np.testing.assert_allclose(np.linalg.norm(quaternion), 1.0, atol=1e-7)
+
+
+def test_grasp_bias_gate_anticipates_contact_and_releases_smoothly() -> None:
+    """Robot grasp correction should close before contact and fade afterward."""
+
+    contacts = torch.zeros((8, 5), dtype=torch.bool)
+    contacts[4, :3] = True
+
+    gate = _grasp_bias_activation(contacts, 2, 3, 0.5)
+
+    torch.testing.assert_close(
+        gate, torch.tensor([0.0, 0.0, 1.0, 1.0, 1.0, 0.5, 0.25, 0.125])
+    )

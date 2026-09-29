@@ -12,6 +12,7 @@ import torch
 import trimesh
 import yourdfpy
 from pyroki.collision import RobotCollision
+from scipy.spatial.transform import Rotation
 
 from mani_skill.envs.sapien_env import BaseEnv
 from mani_skill.sensors.camera import CameraConfig
@@ -42,6 +43,77 @@ def _quaternion_multiply_wxyz(left: torch.Tensor, right: torch.Tensor) -> torch.
         + torch.linalg.cross(left_xyz, right_xyz, dim=-1)
     )
     return torch.cat([left_w * right_w - (left_xyz * right_xyz).sum(-1, keepdim=True), xyz], dim=-1)
+
+
+def _angular_velocity_between_wxyz(
+    start: torch.Tensor, target: torch.Tensor, duration_s: float
+) -> torch.Tensor:
+    """Return the constant world-frame angular velocity joining two poses."""
+
+    if duration_s <= 0:
+        raise ValueError("quaternion interpolation duration must be positive")
+    start = torch.nn.functional.normalize(start, dim=-1)
+    target = torch.nn.functional.normalize(target, dim=-1)
+    target = torch.where(
+        (start * target).sum(dim=-1, keepdim=True) < 0, -target, target
+    )
+    conjugate = torch.cat([start[..., :1], -start[..., 1:]], dim=-1)
+    delta = _quaternion_multiply_wxyz(target, conjugate)
+    vector = delta[..., 1:]
+    vector_norm = torch.linalg.vector_norm(vector, dim=-1, keepdim=True)
+    angle = 2.0 * torch.atan2(vector_norm, delta[..., :1].clamp_min(1e-12))
+    axis = vector / vector_norm.clamp_min(1e-12)
+    return axis * (angle / duration_s)
+
+
+def _grasp_bias_activation(
+    reference_contact: torch.Tensor,
+    lookahead_steps: int,
+    minimum_fingers: int,
+    release_decay: float,
+) -> torch.Tensor:
+    """Build a smooth pre-contact gate for a robot-specific grasp correction."""
+
+    if lookahead_steps < 0:
+        raise ValueError("grasp contact lookahead must be non-negative")
+    if minimum_fingers <= 0:
+        raise ValueError("minimum grasp finger count must be positive")
+    if not 0.0 <= release_decay < 1.0:
+        raise ValueError("grasp release decay must be in [0, 1)")
+    active = reference_contact.sum(dim=-1) >= minimum_fingers
+    gate = active.to(torch.float32)
+    for offset in range(1, lookahead_steps + 1):
+        gate[:-offset] = torch.maximum(
+            gate[:-offset], active[offset:].to(torch.float32)
+        )
+    for frame in range(1, len(gate)):
+        gate[frame] = torch.maximum(gate[frame], gate[frame - 1] * release_decay)
+    return gate
+
+
+def _mesh_mass_properties(
+    mesh: trimesh.Trimesh, mass_kg: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return center, principal inertia, and principal-frame wxyz rotation."""
+
+    if mass_kg <= 0:
+        raise ValueError("object mass must be positive")
+    if not mesh.is_watertight or not np.isfinite(mesh.volume) or mesh.volume <= 0:
+        raise ValueError("object mesh must be watertight with positive volume")
+    inertia_tensor = np.asarray(mesh.moment_inertia) * (mass_kg / mesh.volume)
+    principal_inertia, principal_axes = trimesh.inertia.principal_axis(
+        inertia_tensor
+    )
+    if np.linalg.det(principal_axes) < 0:
+        principal_axes[-1] *= -1
+    principal_to_mesh = principal_axes.T
+    quaternion_xyzw = Rotation.from_matrix(principal_to_mesh).as_quat()
+    quaternion_wxyz = quaternion_xyzw[[3, 0, 1, 2]]
+    return (
+        np.asarray(mesh.center_mass, dtype=np.float32),
+        np.asarray(principal_inertia, dtype=np.float32),
+        np.asarray(quaternion_wxyz, dtype=np.float32),
+    )
 
 
 class MorphometricResidualEnv(BaseEnv):
@@ -91,6 +163,7 @@ class MorphometricResidualEnv(BaseEnv):
                 control_freq=config.control.control_frequency_hz,
             ),
             sim_backend=sim_backend,
+            enhanced_determinism=True,
             **kwargs,
         )
 
@@ -141,6 +214,22 @@ class MorphometricResidualEnv(BaseEnv):
         self._reference_contact = torch.as_tensor(
             self.reference.reference_contact, dtype=torch.bool, device=device
         )
+        grasp_bias = torch.as_tensor(
+            self.config.control.grasp_bias_rad,
+            dtype=torch.float32,
+            device=device,
+        )
+        if grasp_bias.shape != (self._reference_qpos.shape[-1],):
+            raise ValueError(
+                "grasp_bias_rad must contain one value per active robot joint"
+            )
+        grasp_gate = _grasp_bias_activation(
+            self._reference_contact,
+            self.config.control.grasp_contact_lookahead_steps,
+            self.config.control.grasp_min_contact_fingers,
+            self.config.control.grasp_release_decay,
+        )
+        self._reference_qpos += grasp_gate[:, None] * grasp_bias[None, :]
         self._reference_table_height = torch.as_tensor(
             self.reference.table_height_m, dtype=torch.float32, device=device
         )
@@ -259,23 +348,28 @@ class MorphometricResidualEnv(BaseEnv):
             material=object_material,
         )
         object_builder.add_visual_from_file(str(self.reference.object_mesh_path))
-        points = self.reference.object_points_local_m
-        extents = np.ptp(points, axis=0)
         mass = self.config.physics.object_mass_kg
-        inertia = mass / 12.0 * np.asarray(
-            [
-                extents[1] ** 2 + extents[2] ** 2,
-                extents[0] ** 2 + extents[2] ** 2,
-                extents[0] ** 2 + extents[1] ** 2,
-            ],
-            dtype=np.float32,
+        object_mesh = trimesh.load_mesh(
+            self.reference.object_mesh_path, process=False
+        )
+        if not isinstance(object_mesh, trimesh.Trimesh):
+            object_mesh = trimesh.util.concatenate(
+                tuple(object_mesh.geometry.values())
+            )
+        center_of_mass, inertia, inertia_quaternion = _mesh_mass_properties(
+            object_mesh, mass
         )
         object_builder.set_mass_and_inertia(
             mass,
-            sapien.Pose(p=[0.0, 0.0, 0.0]),
+            sapien.Pose(
+                p=center_of_mass.tolist(), q=inertia_quaternion.tolist()
+            ),
             tuple(float(value) for value in inertia),
         )
         self.object = object_builder.build_dynamic("reference_object")
+        self._object_center_of_mass[:] = torch.as_tensor(
+            center_of_mass, dtype=torch.float32, device=device
+        )
 
         table_center = self.reference.table_center_xy_m
         table_half = self.reference.table_half_extents_xy_m
@@ -589,9 +683,17 @@ class MorphometricResidualEnv(BaseEnv):
         self.agent.robot.root_pose = Pose.create_from_pq(
             p=root_pose[:, :3], q=root_pose[:, 3:]
         )
+        control_duration = 1.0 / self.config.control.control_frequency_hz
+        self.agent.robot.root_linear_velocity = (
+            target[:, :3] - start[:, :3]
+        ) / control_duration
+        self.agent.robot.root_angular_velocity = _angular_velocity_between_wxyz(
+            start[:, 3:], target[:, 3:], control_duration
+        )
         if self.scene.gpu_sim_enabled:
             # Root-pose writes occur after BaseEnv's controller-target upload.
             self.scene.px.gpu_apply_articulation_root_pose()
+            self.scene.px.gpu_apply_articulation_root_velocity()
 
     def _after_control_step(self) -> None:
         metrics = self._task_metrics(self._active_step)
@@ -641,6 +743,7 @@ class MorphometricResidualEnv(BaseEnv):
             "table_clearance": (
                 metrics["minimum_robot_height"] - metrics["table_height"]
             ),
+            "reference_step": self._active_step.clone(),
             "success": success,
         }
 
