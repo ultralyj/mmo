@@ -21,6 +21,7 @@ from ...models.configuration import morphology_pose_vector, scaled_mano_from_con
 from ...models.jax_mano import axis_angle_to_matrix, mano_lbs
 from ...models.mano import extract_model_arrays, load_mano_model
 from ...optimization.losses import ContactLossWeights, contact_residuals
+from ...optimization.jaxls_mmo import solve_contact_trajectory_jaxls
 from ...optimization.metrics import point_rmse, rotation_error_statistics
 from ...utils.frames import parse_frame_indices
 from ...utils.io import load_json, load_yaml, save_npz, write_json
@@ -86,6 +87,12 @@ def main() -> None:
         help="all, max-contact, comma-separated indices, or START:STOP[:STRIDE]",
     )
     parser.add_argument("--max-evaluations", type=int, default=200)
+    parser.add_argument(
+        "--backend",
+        choices=("jaxls", "scipy"),
+        default="jaxls",
+        help="JAXLS runs the sequential trajectory on GPU; SciPy is the baseline.",
+    )
     parser.add_argument("--progress-every", type=int, default=25)
     parser.add_argument("--contact-weight", type=float)
     parser.add_argument("--table-weight", type=float)
@@ -204,31 +211,24 @@ def main() -> None:
 
     residual_jit = jax.jit(residual)
     jacobian_jit = jax.jit(jax.jacfwd(residual, argnums=0))
-    forward_jit = jax.jit(forward)
 
-    morphology_parameters = morphology_pose_vector(morphology, dtype=np.float64)
-    warm_parameters = morphology_parameters
+    morphology_parameters = morphology_pose_vector(
+        morphology,
+        dtype=np.float32 if args.backend == "jaxls" else np.float64,
+    )
     tip_indices = np.asarray(
         [semantics[name]["tip_vertex_index"] for name in finger_names], dtype=np.int32
     )
 
-    optimized_parameters = []
-    initial_vertices_by_frame = []
-    optimized_vertices_by_frame = []
-    optimized_joints_by_frame = []
-    successes = []
-    evaluations = []
-    initial_contact_rmse = []
-    optimized_contact_rmse = []
-    initial_table_penetration = []
-    optimized_table_penetration = []
-    optimized_pose_mean = []
-    optimized_pose_max = []
-    table_loss_enabled = []
     started = time.perf_counter()
-
-    for output_index, frame in enumerate(selected_frames):
-        frame = int(frame)
+    padded_indices_by_frame = []
+    padded_positions_by_frame = []
+    contact_masks_by_frame = []
+    reference_rotations_by_frame = []
+    table_loss_enabled = []
+    contact_slices = []
+    for frame_value in selected_frames:
+        frame = int(frame_value)
         indices, positions = _contact_slice(
             contact_offsets, flat_contact_indices, flat_contact_positions, frame
         )
@@ -238,60 +238,144 @@ def main() -> None:
         reference_pose = np.concatenate(
             [reference_global_orient[frame], reference_hand_pose[frame]]
         ).reshape(16, 3)
-        reference_rotations = np.asarray(axis_angle_to_matrix(jnp.asarray(reference_pose)))
+        reference_rotations = np.asarray(
+            axis_angle_to_matrix(jnp.asarray(reference_pose))
+        )
         table_height = float(table_heights[frame])
         # This is the exact omission condition stated in Section IV-B.
         use_table = not bool(
             np.all(reference_vertices[frame, tip_indices, 2] < table_height)
         )
-        dynamic_args = (
-            jnp.asarray(padded_indices),
-            jnp.asarray(padded_positions),
-            jnp.asarray(contact_mask),
-            jnp.asarray(reference_rotations),
-            jnp.asarray(table_height, dtype=jnp.float32),
-            jnp.asarray(float(use_table), dtype=jnp.float32),
+        padded_indices_by_frame.append(padded_indices)
+        padded_positions_by_frame.append(padded_positions)
+        contact_masks_by_frame.append(contact_mask)
+        reference_rotations_by_frame.append(reference_rotations)
+        table_loss_enabled.append(use_table)
+        contact_slices.append((indices, positions))
+
+    padded_indices_array = np.asarray(padded_indices_by_frame, dtype=np.int32)
+    padded_positions_array = np.asarray(padded_positions_by_frame, dtype=np.float32)
+    contact_masks_array = np.asarray(contact_masks_by_frame, dtype=np.float32)
+    reference_rotations_array = np.asarray(
+        reference_rotations_by_frame, dtype=np.float32
+    )
+    selected_table_heights = np.asarray(
+        table_heights[selected_frames], dtype=np.float32
+    )
+    table_masks_array = np.asarray(table_loss_enabled, dtype=np.float32)
+
+    if args.backend == "jaxls":
+        (
+            initial_parameter_trajectory,
+            optimized_parameter_trajectory,
+            evaluation_array,
+            convergence_array,
+        ) = solve_contact_trajectory_jaxls(
+            jnp.asarray(morphology_parameters),
+            template,
+            pose_blends,
+            joint_regressor,
+            blend_weights,
+            jnp.asarray(padded_indices_array),
+            jnp.asarray(padded_positions_array),
+            jnp.asarray(contact_masks_array),
+            jnp.asarray(reference_rotations_array),
+            jnp.asarray(selected_table_heights),
+            jnp.asarray(table_masks_array),
+            jnp.asarray(weights.contact, dtype=jnp.float32),
+            jnp.asarray(weights.table, dtype=jnp.float32),
+            jnp.asarray(weights.pose, dtype=jnp.float32),
+            args.max_evaluations,
         )
+        optimized_parameter_trajectory.block_until_ready()
+        initial_parameter_trajectory = np.asarray(initial_parameter_trajectory)
+        optimized_parameters = np.asarray(optimized_parameter_trajectory)
+        evaluations = np.asarray(evaluation_array, dtype=np.int32)
+        converged = np.asarray(convergence_array, dtype=np.bool_)
+        successes = np.isfinite(optimized_parameters).all(axis=1)
+    else:
+        warm_parameters = morphology_parameters
+        initial_parameters = []
+        optimized_parameters_list = []
+        evaluations_list = []
+        successes_list = []
+        for frame_inputs in zip(
+            padded_indices_array,
+            padded_positions_array,
+            contact_masks_array,
+            reference_rotations_array,
+            selected_table_heights,
+            table_masks_array,
+            strict=True,
+        ):
+            dynamic_args = tuple(jnp.asarray(value) for value in frame_inputs)
 
-        initial_vertices, _, _ = forward_jit(jnp.asarray(warm_parameters))
-        initial_vertices = np.asarray(initial_vertices)
+            def scipy_residual(parameters: np.ndarray) -> np.ndarray:
+                """Convert the compiled JAX residual to SciPy's NumPy interface."""
 
-        def scipy_residual(parameters: np.ndarray) -> np.ndarray:
-            """Convert the compiled JAX residual to SciPy's NumPy interface."""
+                return np.asarray(
+                    residual_jit(jnp.asarray(parameters), *dynamic_args),
+                    dtype=np.float64,
+                )
 
-            return np.asarray(
-                residual_jit(jnp.asarray(parameters), *dynamic_args), dtype=np.float64
+            def scipy_jacobian(parameters: np.ndarray) -> np.ndarray:
+                """Convert the exact JAX Jacobian to SciPy's NumPy interface."""
+
+                return np.asarray(
+                    jacobian_jit(jnp.asarray(parameters), *dynamic_args),
+                    dtype=np.float64,
+                )
+
+            initial_parameters.append(warm_parameters.copy())
+            result = least_squares(
+                scipy_residual,
+                warm_parameters,
+                jac=scipy_jacobian,
+                method="lm",
+                max_nfev=args.max_evaluations,
             )
+            warm_parameters = result.x
+            optimized_parameters_list.append(result.x.copy())
+            evaluations_list.append(int(result.nfev))
+            successes_list.append(bool(result.success))
+        initial_parameter_trajectory = np.asarray(initial_parameters)
+        optimized_parameters = np.asarray(optimized_parameters_list)
+        evaluations = np.asarray(evaluations_list, dtype=np.int32)
+        successes = np.asarray(successes_list, dtype=np.bool_)
+        converged = successes.copy()
 
-        def scipy_jacobian(parameters: np.ndarray) -> np.ndarray:
-            """Convert the exact JAX Jacobian to SciPy's NumPy interface."""
+    batched_forward = jax.jit(jax.vmap(forward))
+    combined_parameters = jnp.asarray(
+        np.concatenate([initial_parameter_trajectory, optimized_parameters], axis=0)
+    )
+    all_vertices, all_joints, all_rotations = batched_forward(combined_parameters)
+    all_vertices = np.asarray(all_vertices)
+    all_joints = np.asarray(all_joints)
+    all_rotations = np.asarray(all_rotations)
+    trajectory_length = len(selected_frames)
+    initial_vertices_by_frame = all_vertices[:trajectory_length]
+    optimized_vertices_by_frame = all_vertices[trajectory_length:]
+    optimized_joints_by_frame = all_joints[trajectory_length:]
+    optimized_rotations_by_frame = all_rotations[trajectory_length:]
 
-            return np.asarray(
-                jacobian_jit(jnp.asarray(parameters), *dynamic_args), dtype=np.float64
-            )
-
-        result = least_squares(
-            scipy_residual,
-            warm_parameters,
-            jac=scipy_jacobian,
-            method="lm",
-            max_nfev=args.max_evaluations,
-        )
-        warm_parameters = result.x
-        vertices, joints, rotations = forward_jit(jnp.asarray(result.x))
-        vertices = np.asarray(vertices)
-        joints = np.asarray(joints)
-        rotations = np.asarray(rotations)
+    initial_contact_rmse = []
+    optimized_contact_rmse = []
+    initial_table_penetration = []
+    optimized_table_penetration = []
+    optimized_pose_mean = []
+    optimized_pose_max = []
+    for output_index, frame_value in enumerate(selected_frames):
+        frame = int(frame_value)
+        indices, positions = contact_slices[output_index]
+        initial_vertices = initial_vertices_by_frame[output_index]
+        vertices = optimized_vertices_by_frame[output_index]
+        reference_rotations = reference_rotations_array[output_index]
+        rotations = optimized_rotations_by_frame[output_index]
+        table_height = float(selected_table_heights[output_index])
+        use_table = bool(table_loss_enabled[output_index])
         pose_mean, pose_max = rotation_error_statistics(
             reference_rotations, rotations
         )
-
-        optimized_parameters.append(result.x.copy())
-        initial_vertices_by_frame.append(initial_vertices)
-        optimized_vertices_by_frame.append(vertices)
-        optimized_joints_by_frame.append(joints)
-        successes.append(bool(result.success))
-        evaluations.append(int(result.nfev))
         initial_contact_rmse.append(point_rmse(initial_vertices[indices], positions))
         optimized_contact_rmse.append(point_rmse(vertices[indices], positions))
         initial_table_penetration.append(
@@ -306,18 +390,19 @@ def main() -> None:
         )
         optimized_pose_mean.append(pose_mean)
         optimized_pose_max.append(pose_max)
-        table_loss_enabled.append(use_table)
         if (
             output_index == 0
             or output_index + 1 == len(selected_frames)
             or (output_index + 1) % args.progress_every == 0
-            or not result.success
+            or not successes[output_index]
         ):
             print(
                 f"[{output_index + 1}/{len(selected_frames)}] frame {frame}: "
                 f"contact {initial_contact_rmse[-1] * 1000:.2f} -> "
                 f"{optimized_contact_rmse[-1] * 1000:.2f} mm, "
-                f"nfev={result.nfev}, success={result.success}",
+                f"iterations={int(evaluations[output_index])}, "
+                f"success={bool(successes[output_index])}, "
+                f"converged={bool(converged[output_index])}",
                 flush=True,
             )
 
@@ -341,6 +426,7 @@ def main() -> None:
         "optimized_pose_mean_rad": np.asarray(optimized_pose_mean, dtype=np.float32),
         "optimized_pose_max_rad": np.asarray(optimized_pose_max, dtype=np.float32),
         "optimizer_success": np.asarray(successes, dtype=np.bool_),
+        "optimizer_converged": np.asarray(converged, dtype=np.bool_),
         "optimizer_evaluations": np.asarray(evaluations, dtype=np.int32),
         "morphology_scales": scales,
     }
@@ -361,7 +447,14 @@ def main() -> None:
             "pose": weights.pose,
         },
         "loss_weights_note": "Reproduction values; the paper does not publish weights.",
-        "solver": "sequential Levenberg-Marquardt with exact JAX Jacobian",
+        "backend": args.backend,
+        "solver": (
+            "on-device JAXLS Levenberg-Marquardt inside jax.lax.scan"
+            if args.backend == "jaxls"
+            else "SciPy Levenberg-Marquardt with exact JAX Jacobian"
+        ),
+        "jax_backend": jax.default_backend(),
+        "jax_devices": [str(device) for device in jax.devices()],
         "warm_start_note": (
             "First processed frame starts from morphology matching; each later processed "
             "frame starts from the preceding processed solution. Use --frames all for the "
@@ -374,6 +467,7 @@ def main() -> None:
         ),
         "mean_pose_deviation_deg": float(np.rad2deg(np.mean(optimized_pose_mean))),
         "successful_frames": int(np.count_nonzero(successes)),
+        "converged_frames": int(np.count_nonzero(converged)),
         "elapsed_seconds": elapsed,
         "throughput_frames_per_second": float(len(selected_frames) / elapsed),
         "output": str(args.output),

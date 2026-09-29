@@ -6,6 +6,9 @@ import jax.numpy as jnp
 from collections.abc import Sequence
 
 
+MANO_PARENT_INDICES = (-1, 0, 1, 2, 0, 4, 5, 0, 7, 8, 0, 10, 11, 0, 13, 14)
+
+
 def axis_angle_to_matrix(rotvecs: jnp.ndarray) -> jnp.ndarray:
     """Convert axis-angle vectors to rotation matrices, matching SMPL-X."""
 

@@ -10,6 +10,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
   "chumpy>=0.70",
   "jax[cuda13]>=0.6",
+  "jaxls",
   "matplotlib>=3.11.2",
   "numpy>=2.0",
   "pyrender>=0.1.45",
@@ -48,6 +49,7 @@ explicit = true
 [tool.uv.sources]
 torch = { index = "pytorch-cu128" }
 pyroki = { git = "https://github.com/chungmin99/pyroki.git", rev = "388e43e1fc0d0ee382968d3dd72970fd62a0450c" }
+jaxls = { git = "https://github.com/brentyi/jaxls.git", rev = "50a58be88c5ef74532f09e3f55268b4f02c490e3" }
 
 [tool.uv.extra-build-dependencies]
 chumpy = ["pip"]

@@ -39,8 +39,8 @@ to depend on internal module paths.
 - The 22-DoF neutral robot skeleton and one-to-one five-finger semantic mapping
   are defined in `configs/sharpa_wave_right.yaml`.
 - Scaled MANO equations 5--6, initial scale ratios, equation 7 residuals,
-  contact detection/fill, equations 8--10 (with the Sharpa-inapplicable coupled
-  finger term omitted), and JAX-autodifferentiated LM are implemented.
+  contact detection/fill, and equations 8--10 (with the Sharpa-inapplicable
+  coupled-finger term omitted) are implemented in JAX.
 - Real Sharpa morphology matching is executable with bounded nonlinear least
   squares and an exact JAX Jacobian. The bounds prevent periodic axis-angle and
   scale-collapse degeneracies observed with unconstrained LM. A local
@@ -54,10 +54,11 @@ to depend on internal module paths.
   right-hand template and apple/table geometry are usable; the full
   `apple_lift` right-hand trajectory and 5 mm reference contacts can be
   exported without expanding a copy of the dense object mesh per frame.
-- Contact matching now runs sequentially over the complete GRAB trajectory with
-  fixed morphology scales, max-contact index fill, object-contact, table, and
-  SO(3) pose terms. Fixed-size padded contacts allow one JAX compilation for
-  all varying contact counts.
+- Morphology and contact matching use JAXLS Levenberg--Marquardt by default.
+  Contact matching keeps the complete sequential warm-start trajectory on the
+  accelerator with `jax.lax.scan`; fixed-size padded contacts avoid recompiling
+  for different contact counts. The original SciPy implementations remain
+  available through `--backend scipy` for regression comparisons.
 - Loss weights are reproduction values because the paper does not publish its
   values. For Wuji Hand2, a max-contact-frame sweep selected pose weight
   `1e-3`; contact weight is `1.0`, and a penetration sweep selected table
@@ -66,8 +67,10 @@ to depend on internal module paths.
   diffusion and linear blend skinning construction. The complete 2,602-frame
   target trajectory passes identity and rotation-consistency checks.
 - Robot pose recovery uses a floating 6-DoF wrist and Wuji Hand2's 20 actuated
-  joints, solved consecutively with PyRoki warm starts, joint limits, temporal
-  regularization, capsule self-collision, and sampled hand/table collision.
+  joints, solved consecutively with PyRoki/JAXLS warm starts, joint limits,
+  temporal regularization, capsule self-collision, and sampled hand/table
+  collision. Its default `scan` execution keeps the trajectory and batched
+  metrics on the accelerator.
   The balanced full run reaches 4.96 mm mean target RMSE and 20.99 degrees mean
   orientation error, with 0.55 mm maximum sampled table penetration.
 
@@ -80,15 +83,36 @@ uv run morphim-inspect-robot
 uv run morphim-inspect-inputs
 uv run morphim-export-grab-hand
 uv run morphim-export-grab-contacts
-JAX_PLATFORMS=cpu uv run morphim-init-morphology
-JAX_PLATFORMS=cpu uv run morphim-match-morphology
+uv run morphim-init-morphology
+uv run morphim-match-morphology
 uv run morphim-render-morphology
 PYOPENGL_PLATFORM=egl uv run morphim-render-paper-style
 ```
 
-The environment uses PyTorch CUDA 12.8 wheels and JAX CUDA 13 wheels. PyRoki is
-pinned to commit `388e43e1fc0d0ee382968d3dd72970fd62a0450c` for reproducible
-IK behavior. All are installed by `uv sync`.
+The environment uses PyTorch CUDA 12.8 wheels and JAX CUDA 13 wheels. JAXLS is
+pinned to commit `50a58be88c5ef74532f09e3f55268b4f02c490e3`, and PyRoki is pinned
+to `388e43e1fc0d0ee382968d3dd72970fd62a0450c`. All are installed by
+`uv sync`. Set `JAX_PLATFORMS=cpu` explicitly when a CUDA device is unavailable.
+
+## Accelerator backends and measured throughput
+
+The JAXLS backend follows the paper's implementation choice and is the default.
+The morphology variables use a smooth `tanh` reparameterization so the finite
+bounds from the stable SciPy baseline are preserved. Contact frames are still
+solved in chronological order, but the warm-start loop runs as a compiled GPU
+scan rather than crossing the Python/SciPy boundary for every LM step.
+
+On the current server, including first-call compilation and output metric
+calculation, a 100-frame contact window ran at 35.44 FPS with JAXLS versus
+28.22 FPS with SciPy. The complete 2,602-frame JAXLS run took 10.81 seconds
+(240.66 FPS), with 3.39 mm mean contact RMSE. The paper's reported MMO speed
+excludes robot IK; pose recovery is therefore reported separately. A 500-frame
+IK window ran at 45.37 FPS with the GPU scan versus 44.45 FPS with per-frame
+host dispatch, also including compilation.
+
+These paths currently use one JAX device. `jax_devices` in each JSON result
+records every visible device, but the implementation does not shard one
+trajectory across multiple GPUs because consecutive warm starts are dependent.
 
 ## Required licensed inputs
 
@@ -107,36 +131,42 @@ Beta 2 model pinned under `assets/wuji-description` at revision
 `c2cd7f8d1ef8b6dc8cb907c17daa5a88b4442d95`:
 
 ```bash
-JAX_PLATFORMS=cpu uv run morphim-match-morphology \
+uv run morphim-match-morphology \
+  --backend jaxls \
   --config configs/wuji_hand2_beta2_right.yaml \
-  --output-json outputs/wuji_hand2/morphology_match.json \
-  --output-geometry outputs/wuji_hand2/morphology_match.npz
+  --output-json outputs/wuji_hand2/morphology_match_jaxls.json \
+  --output-geometry outputs/wuji_hand2/morphology_match_jaxls.npz
 PYOPENGL_PLATFORM=egl uv run morphim-render-paper-style \
   --config configs/wuji_hand2_beta2_right.yaml \
-  --geometry outputs/wuji_hand2/morphology_match.npz \
+  --geometry outputs/wuji_hand2/morphology_match_jaxls.npz \
   --output outputs/wuji_hand2/morphology_paper_style.png \
   --aligned-output outputs/wuji_hand2/morphology_aligned_mano_smooth.png
 
 # Paper-exact consecutive warm start over all 2,602 apple_lift frames.
 uv run morphim-match-contacts \
+  --backend jaxls \
+  --morphology-json outputs/wuji_hand2/morphology_match_jaxls.json \
   --frames all \
-  --output outputs/wuji_hand2/contact_match_full.npz \
-  --output-json outputs/wuji_hand2/contact_match_full.json
+  --output outputs/wuji_hand2/contact_match_jaxls_full.npz \
+  --output-json outputs/wuji_hand2/contact_match_jaxls_full.json
 
 PYOPENGL_PLATFORM=egl uv run morphim-render-contacts \
-  --result outputs/wuji_hand2/contact_match_full.npz \
+  --result outputs/wuji_hand2/contact_match_jaxls_full.npz \
   --frame 1732 \
   --output outputs/wuji_hand2/contact_matching.png
 
 # Paper equations 11--12: heat diffusion skinning and robot pose targets.
 uv run morphim-generate-robot-targets \
-  --contact-match outputs/wuji_hand2/contact_match_full.npz \
-  --output outputs/wuji_hand2/robot_targets.npz \
-  --output-json outputs/wuji_hand2/robot_targets.json
+  --morphology-json outputs/wuji_hand2/morphology_match_jaxls.json \
+  --contact-match outputs/wuji_hand2/contact_match_jaxls_full.npz \
+  --output outputs/wuji_hand2/robot_targets_jaxls.npz \
+  --output-json outputs/wuji_hand2/robot_targets_jaxls.json
 
 # Consecutive warm-started floating-base IK over the complete trajectory.
 uv run morphim-solve-robot-ik \
-  --targets outputs/wuji_hand2/robot_targets.npz \
+  --execution scan \
+  --targets outputs/wuji_hand2/robot_targets_jaxls.npz \
+  --contact-match outputs/wuji_hand2/contact_match_jaxls_full.npz \
   --frames all \
   --output outputs/wuji_hand2/robot_pose_full.npz \
   --output-json outputs/wuji_hand2/robot_pose_full.json

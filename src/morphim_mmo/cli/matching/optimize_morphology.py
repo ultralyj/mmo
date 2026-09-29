@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import time
 
 import jax
 import jax.numpy as jnp
@@ -17,6 +18,7 @@ from ...models.scaled_mano import initial_scale_ratios, scale_mano_arrays
 from ...models.urdf import UrdfModel, extract_semantic_points
 from ...optimization.alignment import initial_rigid_alignment
 from ...optimization.losses import morphology_residuals
+from ...optimization.jaxls_mmo import solve_morphology_jaxls
 from ...optimization.metrics import point_rmse
 from ...optimization.solver import solve_bounded_least_squares, solve_lm
 from ...utils.io import load_yaml, save_npz, write_json
@@ -31,6 +33,12 @@ def main() -> None:
         "--mano-dir", type=Path, default=Path("../data/models/mano/mano_v1_2/models")
     )
     parser.add_argument("--max-evaluations", type=int, default=500)
+    parser.add_argument(
+        "--backend",
+        choices=("jaxls", "scipy"),
+        default="jaxls",
+        help="Use GPU-compatible JAXLS or the SciPy baseline.",
+    )
     parser.add_argument("--solver", choices=("bounded", "lm"), default="bounded")
     parser.add_argument(
         "--pose-component-limit-rad",
@@ -203,10 +211,64 @@ def main() -> None:
             translation + 0.2,
         ]
     )
-    if args.solver == "lm":
+    started = time.perf_counter()
+    if args.backend == "jaxls":
+        finger_memberships = np.stack(
+            [
+                np.sum(
+                    arrays.blend_weights[:, np.asarray(spec.skinning_joint_indices)],
+                    axis=1,
+                )
+                for spec in specs
+            ],
+            axis=1,
+        ).astype(np.float32)
+        finger_mcp_indices = np.asarray(
+            [spec.mcp_joint_index for spec in specs], dtype=np.int32
+        )
+        solution_parameters, iterations, converged = solve_morphology_jaxls(
+            jnp.asarray(initial_parameters, dtype=jnp.float32),
+            jnp.asarray(lower_bounds, dtype=jnp.float32),
+            jnp.asarray(upper_bounds, dtype=jnp.float32),
+            template,
+            pose_blends,
+            joint_regressor,
+            blend_weights,
+            jnp.asarray(finger_memberships),
+            jnp.asarray(finger_mcp_indices),
+            jnp.asarray(mano_semantics["wrist_joint_index"], dtype=jnp.int32),
+            joint_indices,
+            tip_indices,
+            joint_targets,
+            tip_targets,
+            jnp.asarray(config["loss_weights"]["joint"], dtype=jnp.float32),
+            jnp.asarray(config["loss_weights"]["fingertip"], dtype=jnp.float32),
+            args.max_evaluations,
+        )
+        solution_parameters.block_until_ready()
+        solution_parameters = np.asarray(solution_parameters)
+        result_success = bool(np.isfinite(solution_parameters).all())
+        result_message = (
+            "JAXLS convergence criterion reached"
+            if bool(np.asarray(converged))
+            else "JAXLS returned a finite solution at its stopping condition"
+        )
+        result_optimality = None
+        result_evaluations = int(np.asarray(iterations))
+        method = "bounded JAXLS Levenberg-Marquardt on JAX"
+        bounds_note = (
+            "Finite baseline bounds are enforced by a differentiable tanh "
+            "reparameterization."
+        )
+    elif args.solver == "lm":
         result = solve_lm(
             residual, initial_parameters, max_evaluations=args.max_evaluations
         )
+        solution_parameters = result.parameters
+        result_success = result.success
+        result_message = result.message
+        result_optimality = result.optimality
+        result_evaluations = result.evaluations
         method = "Levenberg-Marquardt with exact JAX Jacobian"
         bounds_note = "Unbounded, matching the solver stated in the paper."
     else:
@@ -217,16 +279,24 @@ def main() -> None:
             upper_bounds,
             max_evaluations=args.max_evaluations,
         )
+        solution_parameters = result.parameters
+        result_success = result.success
+        result_message = result.message
+        result_optimality = result.optimality
+        result_evaluations = result.evaluations
         method = "bounded trust-region reflective with exact JAX Jacobian"
         bounds_note = (
             "Scale bounds are 0.5x--1.5x initialization; "
             f"local hand axis-angle components are bounded to "
             f"+/-{args.pose_component_limit_rad:g} rad."
         )
-    scales, vertices, joints, rotations = forward(jnp.asarray(result.parameters))
-    verified_residual = np.asarray(residual(jnp.asarray(result.parameters)))
+    elapsed = time.perf_counter() - started
+    scales, vertices, joints, rotations = forward(jnp.asarray(solution_parameters))
+    verified_residual = np.asarray(residual(jnp.asarray(solution_parameters)))
     verified_cost = float(0.5 * np.sum(verified_residual**2))
-    verified_jit_residual = np.asarray(jax.jit(residual)(jnp.asarray(result.parameters)))
+    verified_jit_residual = np.asarray(
+        jax.jit(residual)(jnp.asarray(solution_parameters))
+    )
     verified_jit_cost = float(0.5 * np.sum(verified_jit_residual**2))
 
     initial_vertices = np.asarray(initial_vertices)
@@ -250,7 +320,7 @@ def main() -> None:
         ),
     }
     payload = {
-        "status": "optimized" if result.success else "optimizer_stopped",
+        "status": "optimized" if result_success else "optimizer_stopped",
         "hand": config["hand"],
         "robot_source_revision": config["source_revision"],
         "mano_side": "right",
@@ -258,20 +328,24 @@ def main() -> None:
         "scale_order": ["palm", *finger_names],
         "initial_scales": initial_scales.tolist(),
         "optimized_scales": scales.tolist(),
-        "global_axis_angle_rad": result.parameters[6:9].tolist(),
-        "hand_pose_axis_angle_rad": result.parameters[9:54].reshape(15, 3).tolist(),
-        "translation_m": result.parameters[54:57].tolist(),
+        "global_axis_angle_rad": solution_parameters[6:9].tolist(),
+        "hand_pose_axis_angle_rad": solution_parameters[9:54].reshape(15, 3).tolist(),
+        "translation_m": solution_parameters[54:57].tolist(),
         "metrics": metrics,
         "optimizer": {
             "method": method,
+            "backend": args.backend,
             "bounds_note": bounds_note,
-            "success": result.success,
-            "message": result.message,
-            "cost": result.cost,
+            "success": result_success,
+            "message": result_message,
+            "cost": verified_cost,
             "verified_cost": verified_cost,
             "verified_jit_cost": verified_jit_cost,
-            "optimality": result.optimality,
-            "evaluations": result.evaluations,
+            "optimality": result_optimality,
+            "evaluations": result_evaluations,
+            "elapsed_seconds": elapsed,
+            "jax_backend": jax.default_backend(),
+            "jax_devices": [str(device) for device in jax.devices()],
         },
         "loss_weights_note": "Placeholder weights: the paper does not publish values.",
     }

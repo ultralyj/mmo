@@ -18,7 +18,6 @@ from pyroki.collision import RobotCollision
 import trimesh
 import yourdfpy
 
-from ...optimization.metrics import point_rmse, rotation_errors
 from ...utils.frames import parse_frame_indices
 from ...utils.io import load_yaml, save_npz, write_json
 
@@ -207,12 +206,115 @@ def _solve_frame(
     return solution[joint_var], solution[base_var].wxyz_xyz
 
 
-def _world_link_poses(robot: pk.Robot, joints: np.ndarray, base: np.ndarray) -> np.ndarray:
-    """Evaluate every robot link pose in the world frame."""
+@jdc.jit
+def _solve_trajectory(
+    robot: pk.Robot,
+    collision: RobotCollision,
+    target_pose_trajectory: jax.Array,
+    target_link_indices: jax.Array,
+    initial_joints: jax.Array,
+    initial_base_wxyz_xyz: jax.Array,
+    surface_points: jax.Array,
+    surface_link_indices: jax.Array,
+    table_heights: jax.Array,
+    position_weight: jax.Array,
+    orientation_weight: jax.Array,
+    joint_velocity_weight: jax.Array,
+    base_translation_velocity_weight: jax.Array,
+    base_orientation_velocity_weight: jax.Array,
+    self_collision_weight: jax.Array,
+    self_collision_margin: jax.Array,
+    table_weight: jax.Array,
+) -> tuple[jax.Array, jax.Array]:
+    """Solve a complete IK trajectory on-device with sequential warm starts."""
 
-    link_poses = jaxlie.SE3(robot.forward_kinematics(jnp.asarray(joints)))
-    world = jaxlie.SE3(jnp.asarray(base)) @ link_poses
-    return np.asarray(world.as_matrix())
+    def solve_step(
+        previous: tuple[jax.Array, jax.Array],
+        frame_inputs: tuple[jax.Array, jax.Array],
+    ) -> tuple[tuple[jax.Array, jax.Array], tuple[jax.Array, jax.Array]]:
+        """Solve one scan frame and carry its solution to the next frame."""
+
+        previous_joints, previous_base = previous
+        target_poses, table_height = frame_inputs
+        joints, base = _solve_frame(
+            robot,
+            collision,
+            target_poses,
+            target_link_indices,
+            previous_joints,
+            previous_base,
+            surface_points,
+            surface_link_indices,
+            table_height,
+            position_weight,
+            orientation_weight,
+            joint_velocity_weight,
+            base_translation_velocity_weight,
+            base_orientation_velocity_weight,
+            self_collision_weight,
+            self_collision_margin,
+            table_weight,
+        )
+        return (joints, base), (joints, base)
+
+    _, trajectory = jax.lax.scan(
+        solve_step,
+        (initial_joints, initial_base_wxyz_xyz),
+        (target_pose_trajectory, table_heights),
+    )
+    return trajectory
+
+
+@jdc.jit
+def _trajectory_metrics(
+    robot: pk.Robot,
+    collision: RobotCollision,
+    joints: jax.Array,
+    bases: jax.Array,
+    target_pose_trajectory: jax.Array,
+    target_link_indices: jax.Array,
+    surface_points: jax.Array,
+    surface_link_indices: jax.Array,
+    table_heights: jax.Array,
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+    """Evaluate pose, table, and self-collision metrics for all frames on-device."""
+
+    def world_poses(configuration: jax.Array, base: jax.Array) -> jax.Array:
+        """Return all world-frame link matrices for one configuration."""
+
+        link_poses = jaxlie.SE3(robot.forward_kinematics(configuration))
+        return (jaxlie.SE3(base) @ link_poses).as_matrix()
+
+    world = jax.vmap(world_poses)(joints, bases)
+    actual = world[:, target_link_indices]
+    position_delta = actual[:, :, :3, 3] - target_pose_trajectory[:, :, :3, 3]
+    position_rmse = jnp.sqrt(jnp.mean(jnp.sum(position_delta**2, axis=-1), axis=-1))
+    relative = (
+        jnp.swapaxes(actual[:, :, :3, :3], -1, -2)
+        @ target_pose_trajectory[:, :, :3, :3]
+    )
+    cosine = jnp.clip(
+        (jnp.trace(relative, axis1=-2, axis2=-1) - 1.0) / 2.0,
+        -1.0,
+        1.0,
+    )
+    orientation_mean = jnp.mean(jnp.arccos(cosine), axis=-1)
+    sample_link_world = jnp.take(world, surface_link_indices, axis=1)
+    sample_world = jnp.einsum(
+        "tpij,pj->tpi",
+        sample_link_world[:, :, :3, :3],
+        surface_points,
+    ) + sample_link_world[:, :, :3, 3]
+    table_penetration = jnp.max(
+        jnp.maximum(0.0, table_heights[:, None] - sample_world[:, :, 2]),
+        axis=1,
+    )
+    collision_minimum = jax.vmap(
+        lambda configuration: jnp.min(
+            collision.compute_self_collision_distance(robot, configuration)
+        )
+    )(joints)
+    return position_rmse, orientation_mean, table_penetration, collision_minimum
 
 
 def main() -> None:
@@ -236,6 +338,12 @@ def main() -> None:
         help="all, comma-separated indices, or START:STOP[:STRIDE]",
     )
     parser.add_argument("--progress-every", type=int, default=25)
+    parser.add_argument(
+        "--execution",
+        choices=("scan", "host"),
+        default="scan",
+        help="Keep the trajectory on GPU with lax.scan or dispatch frame-by-frame.",
+    )
     parser.add_argument("--position-weight", type=float)
     parser.add_argument("--orientation-weight", type=float)
     parser.add_argument("--self-collision-weight", type=float)
@@ -292,25 +400,23 @@ def main() -> None:
     previous_base = np.asarray(jaxlie.SE3.from_matrix(jnp.asarray(first_target)).wxyz_xyz)
     table_heights = contact["table_height_m"]
 
-    joint_trajectory = []
-    base_trajectory = []
-    position_rmse = []
-    orientation_mean = []
-    table_penetration = []
-    self_collision_minimum = []
+    selected_targets = jnp.asarray(targets["target_link_poses"][selected])
+    selected_table_heights = jnp.asarray(table_heights[selected])
+    target_link_indices_jax = jnp.asarray(target_link_indices)
+    samples_jax = jnp.asarray(samples)
+    sample_link_indices_jax = jnp.asarray(sample_link_indices)
     started = time.perf_counter()
-    for output_index, frame in enumerate(selected):
-        frame = int(frame)
-        previous_joints, previous_base = _solve_frame(
+    if args.execution == "scan":
+        joint_trajectory_jax, base_trajectory_jax = _solve_trajectory(
             robot,
             collision,
-            jnp.asarray(targets["target_link_poses"][frame]),
-            jnp.asarray(target_link_indices),
+            selected_targets,
+            target_link_indices_jax,
             jnp.asarray(previous_joints),
             jnp.asarray(previous_base),
-            jnp.asarray(samples),
-            jnp.asarray(sample_link_indices),
-            jnp.asarray(table_heights[frame]),
+            samples_jax,
+            sample_link_indices_jax,
+            selected_table_heights,
             jnp.asarray(settings["position_residual_weight"]),
             jnp.asarray(settings["orientation_residual_weight"]),
             jnp.asarray(settings["joint_velocity_residual_weight"]),
@@ -320,29 +426,65 @@ def main() -> None:
             jnp.asarray(settings["self_collision_margin_m"]),
             jnp.asarray(settings["table_residual_weight"]),
         )
-        previous_joints = np.asarray(previous_joints)
-        previous_base = np.asarray(previous_base)
-        world_poses = _world_link_poses(robot, previous_joints, previous_base)
-        actual = world_poses[target_link_indices]
-        target = targets["target_link_poses"][frame]
-        position_rmse.append(point_rmse(actual[:, :3, 3], target[:, :3, 3]))
-        orientation_mean.append(
-            float(np.mean(rotation_errors(actual[:, :3, :3], target[:, :3, :3])))
-        )
-        sample_world = np.einsum(
-            "pij,pj->pi",
-            world_poses[sample_link_indices, :3, :3],
-            samples,
-        ) + world_poses[sample_link_indices, :3, 3]
-        table_penetration.append(
-            float(np.max(np.maximum(0.0, table_heights[frame] - sample_world[:, 2])))
-        )
-        collision_distances = collision.compute_self_collision_distance(
-            robot, jnp.asarray(previous_joints)
-        )
-        self_collision_minimum.append(float(np.min(np.asarray(collision_distances))))
-        joint_trajectory.append(previous_joints.copy())
-        base_trajectory.append(previous_base.copy())
+    else:
+        joint_values = []
+        base_values = []
+        for frame_target, table_height in zip(
+            selected_targets, selected_table_heights, strict=True
+        ):
+            previous_joints, previous_base = _solve_frame(
+                robot,
+                collision,
+                frame_target,
+                target_link_indices_jax,
+                jnp.asarray(previous_joints),
+                jnp.asarray(previous_base),
+                samples_jax,
+                sample_link_indices_jax,
+                table_height,
+                jnp.asarray(settings["position_residual_weight"]),
+                jnp.asarray(settings["orientation_residual_weight"]),
+                jnp.asarray(settings["joint_velocity_residual_weight"]),
+                jnp.asarray(settings["base_translation_velocity_residual_weight"]),
+                jnp.asarray(settings["base_orientation_velocity_residual_weight"]),
+                jnp.asarray(settings["self_collision_residual_weight"]),
+                jnp.asarray(settings["self_collision_margin_m"]),
+                jnp.asarray(settings["table_residual_weight"]),
+            )
+            previous_joints = np.asarray(previous_joints)
+            previous_base = np.asarray(previous_base)
+            joint_values.append(previous_joints)
+            base_values.append(previous_base)
+        joint_trajectory_jax = jnp.asarray(np.asarray(joint_values))
+        base_trajectory_jax = jnp.asarray(np.asarray(base_values))
+
+    (
+        position_rmse_jax,
+        orientation_mean_jax,
+        table_penetration_jax,
+        self_collision_minimum_jax,
+    ) = _trajectory_metrics(
+        robot,
+        collision,
+        joint_trajectory_jax,
+        base_trajectory_jax,
+        selected_targets,
+        target_link_indices_jax,
+        samples_jax,
+        sample_link_indices_jax,
+        selected_table_heights,
+    )
+    position_rmse_jax.block_until_ready()
+    elapsed = time.perf_counter() - started
+    joint_trajectory = np.asarray(joint_trajectory_jax, dtype=np.float32)
+    base_trajectory = np.asarray(base_trajectory_jax, dtype=np.float32)
+    position_rmse = np.asarray(position_rmse_jax)
+    orientation_mean = np.asarray(orientation_mean_jax)
+    table_penetration = np.asarray(table_penetration_jax)
+    self_collision_minimum = np.asarray(self_collision_minimum_jax)
+
+    for output_index, frame_value in enumerate(selected):
+        frame = int(frame_value)
         if (
             output_index == 0
             or output_index + 1 == len(selected)
@@ -350,15 +492,11 @@ def main() -> None:
         ):
             print(
                 f"[{output_index + 1}/{len(selected)}] frame {frame}: "
-                f"position={position_rmse[-1] * 1000:.2f} mm, "
-                f"orientation={np.rad2deg(orientation_mean[-1]):.2f} deg, "
-                f"table={table_penetration[-1] * 1000:.2f} mm",
+                f"position={position_rmse[output_index] * 1000:.2f} mm, "
+                f"orientation={np.rad2deg(orientation_mean[output_index]):.2f} deg, "
+                f"table={table_penetration[output_index] * 1000:.2f} mm",
                 flush=True,
             )
-
-    elapsed = time.perf_counter() - started
-    joint_trajectory = np.asarray(joint_trajectory, dtype=np.float32)
-    base_trajectory = np.asarray(base_trajectory, dtype=np.float32)
     save_npz(
         args.output,
         frame_index=targets["frame_index"][selected],
@@ -381,6 +519,9 @@ def main() -> None:
         "status": "optimized",
         "hand": config["hand"],
         "frames_specification": args.frames,
+        "execution": args.execution,
+        "jax_backend": jax.default_backend(),
+        "jax_devices": [str(device) for device in jax.devices()],
         "processed_frame_count": int(len(selected)),
         "mean_position_rmse_mm": float(np.mean(position_rmse) * 1000.0),
         "mean_orientation_error_deg": float(np.rad2deg(np.mean(orientation_mean))),

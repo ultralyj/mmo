@@ -1011,6 +1011,7 @@ dependencies = [
     { name = "chumpy" },
     { name = "jax", version = "0.10.2", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, extra = ["cuda13"], marker = "python_full_version < '3.12'" },
     { name = "jax", version = "0.11.2", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, extra = ["cuda13"], marker = "python_full_version >= '3.12'" },
+    { name = "jaxls" },
     { name = "matplotlib" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version >= '3.12'" },
@@ -1033,6 +1034,7 @@ dev = [
 requires-dist = [
     { name = "chumpy", specifier = ">=0.70" },
     { name = "jax", extras = ["cuda13"], specifier = ">=0.6" },
+    { name = "jaxls", git = "https://github.com/brentyi/jaxls.git?rev=50a58be88c5ef74532f09e3f55268b4f02c490e3" },
     { name = "matplotlib", specifier = ">=3.11.2" },
     { name = "numpy", specifier = ">=2.0" },
     { name = "pyrender", specifier = ">=0.1.45" },
