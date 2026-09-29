@@ -1,0 +1,90 @@
+{
+  "hand": "sharpa_wave_right",
+  "source_revision": "0d19cac602f46456b819e4b6a2c09a74982c9a3e",
+  "urdf": "assets/sharpa-urdf-usd-xml/wave_01/right_sharpa_wave/right_sharpa_wave_with_wrist.urdf",
+  "root_link": "right_hand_wrist",
+  "actuated_dof": 22,
+  "actuated_joint_names": [
+    "right_thumb_CMC_FE",
+    "right_thumb_CMC_AA",
+    "right_thumb_MCP_FE",
+    "right_thumb_MCP_AA",
+    "right_thumb_IP",
+    "right_index_MCP_FE",
+    "right_index_MCP_AA",
+    "right_index_PIP",
+    "right_index_DIP",
+    "right_middle_MCP_FE",
+    "right_middle_MCP_AA",
+    "right_middle_PIP",
+    "right_middle_DIP",
+    "right_ring_MCP_FE",
+    "right_ring_MCP_AA",
+    "right_ring_PIP",
+    "right_ring_DIP",
+    "right_pinky_CMC",
+    "right_pinky_MCP_FE",
+    "right_pinky_MCP_AA",
+    "right_pinky_PIP",
+    "right_pinky_DIP"
+  ],
+  "anatomical_wrist": [
+    0.0,
+    0.0,
+    0.029
+  ],
+  "mcp_positions": {
+    "thumb": [
+      0.01,
+      0.026,
+      0.0504
+    ],
+    "index": [
+      0.001,
+      0.0303,
+      0.1249
+    ],
+    "middle": [
+      0.0,
+      0.01,
+      0.1279
+    ],
+    "ring": [
+      0.0015,
+      -0.0103,
+      0.1219
+    ],
+    "pinky": [
+      0.003000035262994586,
+      -0.0311000614158598,
+      0.1159
+    ]
+  },
+  "fingertip_positions": {
+    "thumb": [
+      0.015392455672196667,
+      0.12330547470427097,
+      0.13922058222909933
+    ],
+    "index": [
+      0.001000095538152538,
+      0.030300479419032748,
+      0.22940899999859307
+    ],
+    "middle": [
+      1.4101752503149939e-12,
+      0.010000383883937815,
+      0.2324092574255457
+    ],
+    "ring": [
+      0.0015000955390981245,
+      -0.010299520579076096,
+      0.22640925742484336
+    ],
+    "pinky": [
+      0.003000514681325472,
+      -0.031099965875595336,
+      0.22040899999859312
+    ]
+  }
+}

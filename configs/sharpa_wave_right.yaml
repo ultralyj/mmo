@@ -1,0 +1,51 @@
+hand: sharpa_wave_right
+display_name: Sharpa Wave
+source_revision: 0d19cac602f46456b819e4b6a2c09a74982c9a3e
+urdf: assets/sharpa-urdf-usd-xml/wave_01/right_sharpa_wave/right_sharpa_wave_with_wrist.urdf
+anatomical_wrist_link: right_hand_C_MC
+fingers: [thumb, index, middle, ring, pinky]
+robot_semantics:
+  thumb:
+    # MANO's first thumb joint is the anatomical thumb root (CMC). The paper
+    # calls every finger root "MCP" for scale initialization.
+    mcp_joint: right_thumb_CMC_FE
+    pip_joint: right_thumb_MCP_FE
+    dip_joint: right_thumb_IP
+    tip_joint: right_thumb_fingertip_fix_joint
+  index:
+    mcp_joint: right_index_MCP_FE
+    pip_joint: right_index_PIP
+    dip_joint: right_index_DIP
+    tip_joint: right_index_fingertip_fix_joint
+  middle:
+    mcp_joint: right_middle_MCP_FE
+    pip_joint: right_middle_PIP
+    dip_joint: right_middle_DIP
+    tip_joint: right_middle_fingertip_fix_joint
+  ring:
+    mcp_joint: right_ring_MCP_FE
+    pip_joint: right_ring_PIP
+    dip_joint: right_ring_DIP
+    tip_joint: right_ring_fingertip_fix_joint
+  pinky:
+    mcp_joint: right_pinky_MCP_FE
+    pip_joint: right_pinky_PIP
+    dip_joint: right_pinky_DIP
+    tip_joint: right_pinky_fingertip_fix_joint
+mano_semantics:
+  wrist_joint_index: 0
+  # Standard MANO 16-joint order. These will be checked against the licensed pkl.
+  thumb: {mcp_joint_index: 13, skinning_joint_indices: [13, 14, 15], tip_vertex_index: 745}
+  index: {mcp_joint_index: 1, skinning_joint_indices: [1, 2, 3], tip_vertex_index: 317}
+  middle: {mcp_joint_index: 4, skinning_joint_indices: [4, 5, 6], tip_vertex_index: 444}
+  ring: {mcp_joint_index: 10, skinning_joint_indices: [10, 11, 12], tip_vertex_index: 556}
+  pinky: {mcp_joint_index: 7, skinning_joint_indices: [7, 8, 9], tip_vertex_index: 673}
+contact:
+  threshold_m: 0.005
+loss_weights:
+  # Paper values are not released. These placeholders must not be presented as official.
+  joint: 1.0
+  fingertip: 1.0
+  contact: 1.0
+  table: 1.0
+  pose: 1.0

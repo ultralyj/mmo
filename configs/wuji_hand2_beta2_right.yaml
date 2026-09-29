@@ -1,0 +1,63 @@
+hand: wuji_hand2_beta2_right
+display_name: Wuji Hand 2 Beta 2
+source_revision: c2cd7f8d1ef8b6dc8cb907c17daa5a88b4442d95
+urdf: assets/wuji-description/hand2/hand2_beta2/body/urdf/right.urdf
+anatomical_wrist_link: r_wrist
+fingers: [thumb, index, middle, ring, pinky]
+robot_semantics:
+  thumb:
+    mcp_joint: r_thumb_cmc_flex
+    pip_joint: r_thumb_mcp
+    dip_joint: r_thumb_ip
+    tip_joint: r_thumb_tip_fixed
+  index:
+    mcp_joint: r_index_finger_mcp_flex
+    pip_joint: r_index_finger_pip
+    dip_joint: r_index_finger_dip
+    tip_joint: r_index_finger_tip_fixed
+  middle:
+    mcp_joint: r_middle_finger_mcp_flex
+    pip_joint: r_middle_finger_pip
+    dip_joint: r_middle_finger_dip
+    tip_joint: r_middle_finger_tip_fixed
+  ring:
+    mcp_joint: r_ring_finger_mcp_flex
+    pip_joint: r_ring_finger_pip
+    dip_joint: r_ring_finger_dip
+    tip_joint: r_ring_finger_tip_fixed
+  pinky:
+    mcp_joint: r_pinky_mcp_flex
+    pip_joint: r_pinky_pip
+    dip_joint: r_pinky_dip
+    tip_joint: r_pinky_tip_fixed
+mano_semantics:
+  wrist_joint_index: 0
+  thumb: {mcp_joint_index: 13, skinning_joint_indices: [13, 14, 15], tip_vertex_index: 745}
+  index: {mcp_joint_index: 1, skinning_joint_indices: [1, 2, 3], tip_vertex_index: 317}
+  middle: {mcp_joint_index: 4, skinning_joint_indices: [4, 5, 6], tip_vertex_index: 444}
+  ring: {mcp_joint_index: 10, skinning_joint_indices: [10, 11, 12], tip_vertex_index: 556}
+  pinky: {mcp_joint_index: 7, skinning_joint_indices: [7, 8, 9], tip_vertex_index: 673}
+contact:
+  threshold_m: 0.005
+loss_weights:
+  # Paper values are not released. These placeholders must not be presented as official.
+  joint: 1.0
+  fingertip: 1.0
+  contact: 1.0
+  # Reproduction value: 100 suppresses millimetre-scale penetration without
+  # the pose distortion observed at 1000. The paper does not publish it.
+  table: 100.0
+  # Reproduction value selected on the max-contact frame: 4.38 mm contact
+  # RMSE with 3.29 deg mean pose deviation. The paper does not publish it.
+  pose: 0.001
+pose_recovery:
+  # Reproduction values; the paper does not publish these hyperparameters.
+  position_residual_weight: 100.0
+  orientation_residual_weight: 2.0
+  joint_velocity_residual_weight: 0.15
+  base_translation_velocity_residual_weight: 0.5
+  base_orientation_velocity_residual_weight: 0.15
+  self_collision_residual_weight: 1000.0
+  self_collision_margin_m: 0.001
+  table_residual_weight: 10000.0
+  table_surface_samples_per_link: 16

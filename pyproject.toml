@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "morphim-mmo"
+version = "0.1.0"
+description = "Minimal MorphIM morphology, contact, and robot-pose pipeline"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "chumpy>=0.70",
+  "jax[cuda13]>=0.6",
+  "matplotlib>=3.11.2",
+  "numpy>=2.0",
+  "pyrender>=0.1.45",
+  "pyroki",
+  "pyyaml>=6.0",
+  "scipy>=1.14",
+  "smplx>=0.1.28",
+  "torch>=2.7",
+  "trimesh>=5.1.0",
+]
+
+[project.scripts]
+morphim-export-grab-hand = "morphim_mmo.cli.data.export_grab_hand:main"
+morphim-export-grab-contacts = "morphim_mmo.cli.data.export_grab_contacts:main"
+morphim-inspect-inputs = "morphim_mmo.cli.diagnostics.inspect_inputs:main"
+morphim-inspect-robot = "morphim_mmo.cli.diagnostics.inspect_robot:main"
+morphim-init-morphology = "morphim_mmo.cli.matching.initialize_morphology:main"
+morphim-match-morphology = "morphim_mmo.cli.matching.optimize_morphology:main"
+morphim-match-contacts = "morphim_mmo.cli.matching.optimize_contacts:main"
+morphim-generate-robot-targets = "morphim_mmo.cli.matching.generate_robot_targets:main"
+morphim-solve-robot-ik = "morphim_mmo.cli.matching.solve_robot_ik:main"
+morphim-render-morphology = "morphim_mmo.cli.rendering.render_morphology:main"
+morphim-render-paper-style = "morphim_mmo.cli.rendering.render_paper_style:main"
+morphim-render-contacts = "morphim_mmo.cli.rendering.render_contact_matching:main"
+morphim-render-contact-gif = "morphim_mmo.cli.rendering.render_contact_gif:main"
+morphim-render-robot-pose = "morphim_mmo.cli.rendering.render_robot_pose:main"
+
+[dependency-groups]
+dev = ["pytest>=8.3"]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+pyroki = { git = "https://github.com/chungmin99/pyroki.git", rev = "388e43e1fc0d0ee382968d3dd72970fd62a0450c" }
+
+[tool.uv.extra-build-dependencies]
+chumpy = ["pip"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/morphim_mmo"]

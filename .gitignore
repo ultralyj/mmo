@@ -1,0 +1,13 @@
+.venv/
+.pytest_cache/
+**/__pycache__/
+*.py[cod]
+
+# External robot-description repositories and local/licensed datasets.
+/assets/
+/data/
+outputs/*
+!outputs/sharpa_neutral_skeleton.json
+!outputs/morphology_initialization.json
+
+# Licensed inputs are stored outside this package under ../data.
