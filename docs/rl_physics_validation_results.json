@@ -1,0 +1,48 @@
+{
+  "non_randomized": {
+    "config": "configs/rl/wuji_hand2_apple_physical_grasp.yaml",
+    "checkpoint": "outputs/rl/lift_physical_v2/checkpoint-final.pt",
+    "seed": 101,
+    "episodes": 256,
+    "success": 256,
+    "strict_success": 256,
+    "final_lift_range_m": [
+      0.04708654433488846,
+      0.04744957387447357
+    ],
+    "maximum_self_contact_force_n": 0.0,
+    "checkpoint_sha256": "a04ac60e15fa338345b3ce765672d6de0c124cc20d99a715b5cf94a6bd315a36",
+    "gif": {
+      "success": true,
+      "seed": 101,
+      "checkpoint": "outputs/rl/lift_physical_v2/checkpoint-final.pt",
+      "peak_lift_m": 0.06195354461669922,
+      "final_lift_m": 0.04725206643342972,
+      "final_add_m": 0.01306143682450056,
+      "failed": false,
+      "finger_order": [
+        "thumb",
+        "index",
+        "middle",
+        "ring",
+        "pinky"
+      ],
+      "hold_contact_fraction": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0
+      ],
+      "final_finger_force_n": [
+        3.4141035079956055,
+        2.201634645462036,
+        1.8251299858093262,
+        0.9392592310905457,
+        0.0
+      ],
+      "finger_match_success": true
+    }
+  },
+  "scope": "First lift plus 1 s hold; prescribed wrist; rigid URDF shells, without gears/tendons/backlash."
+}

@@ -15,6 +15,8 @@ parser.add_argument('--rounds', type=int, default=30)
 parser.add_argument('--num-envs', type=int, default=256)
 parser.add_argument('--group-size', type=int, default=1)
 parser.add_argument('--start-at-zero', action='store_true')
+parser.add_argument('--initial-delta')
+parser.add_argument('--initial-std', type=float, default=.3)
 parser.add_argument('--output', default='outputs/rl/diagnostics/cem_physical_tuned.json')
 args = parser.parse_args()
 config = load_residual_rl_config(args.config)
@@ -33,7 +35,9 @@ mean = torch.zeros(23, device=base.device)
 mean[:20] = -.5 * initial_bias
 if args.start_at_zero:
     mean.zero_()
-std = torch.full_like(mean, .3); std[20:] = .012
+if args.initial_delta:
+    mean = torch.as_tensor(json.loads(Path(args.initial_delta).read_text()),device=base.device)
+std = torch.full_like(mean, args.initial_std); std[20:] = .006
 std[pinky_indices] = 0
 best = mean.clone(); best_score = -float('inf'); history = []
 original_base_pose = base._base_pose_for_step
@@ -105,6 +109,10 @@ try:
                 score -= 2 * info['maximum_self_contact_force']
                 score -= .02 * (info['maximum_object_contact_force'] - 100).clamp_min(0)
             score -= 500 * failed.float()
+            fraction = coverage / max(config.control.hold_steps, 1)
+            matched = torch.where(base._reference_contact[-1], fraction >= .9, fraction <= .1).all(-1)
+            score -= 300 * (~matched).float()
+            score -= 300 * (info['object_lift'] < .04).float()
             group_score = score.reshape(candidate_count, args.group_size)
             robust_score = .5 * group_score.mean(-1) + .5 * group_score.amin(-1)
             proposals = candidates[::args.group_size]

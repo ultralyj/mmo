@@ -27,7 +27,7 @@ def load_reference(config):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/rl/wuji_hand2_apple_fingers.yaml")
+    parser.add_argument("--config", default="configs/rl/wuji_hand2_apple_physical_grasp.yaml")
     parser.add_argument("--output", default="outputs/rl/diagnostics/baseline.json")
     parser.add_argument("--checkpoint")
     parser.add_argument("--num-envs", type=int, default=128)

@@ -159,3 +159,11 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m morphim_mmo.cli.rl.
 - 初次新姿态无DR批量128/128严格通过；这是调参姿态验证，不是最终PPO模型验证。目标余量之后从头训练新PPO，训练中暂时均成功，最终模型需独立验收。
 - 直接开启旧±20%物理与±5cm/±15度位姿随机化，严格验收仅13/256通过；旧模型512/512不可替代新物理验收。正在执行保留小指休息姿态、按8种随机物理取均值/最差值的鲁棒搜索。
 - GPU四场景检查在启用DR后仍通过逐轴effort、velocity、armature、重力、逐对碰撞过滤与小指动作边界。回归测试38通过。
+
+### 新物理无DR模型最终验收
+
+- 从头训练524,288步，`outputs/rl/lift_physical_v2/checkpoint-final.pt`。独立seed=101、256个场景，任务成功与四指保持+最终≥4cm严格标准均256/256；最大非排除自接触力0N。
+- 最终策略逐子步审计：全部速度无超限，FCL非排除自穿透0；拇指最大限位超调0.000490rad（0.028度）。详细逐轴测量摘要 `docs/rl_physics_audit_policy_final.json`。
+- 正式GIF `outputs/rl/diagnostics/lift_physical_four_fingers_success.gif`：峰值6.20cm、保持后4.73cm；四指保持覆盖率[1,1,1,1,0]。小指四个关节维持温和弯曲，未参与对象接触。
+- 默认训练/诊断/渲染配置切换到新物理配置。旧成功模型和GIF保留，README明确其物理约束缺失。38项测试通过。
+- 新物理DR以鲁棒姿态和新物理无DR教师开始训练，恢复±0.05N外力、±20%质量/摩擦/PD增益和±5cm/±15度位姿；保持逐轴硬件上限、重力和自碰撞。最终结果待独立验收。
