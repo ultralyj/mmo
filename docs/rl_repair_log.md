@@ -167,3 +167,15 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m morphim_mmo.cli.rl.
 - 正式GIF `outputs/rl/diagnostics/lift_physical_four_fingers_success.gif`：峰值6.20cm、保持后4.73cm；四指保持覆盖率[1,1,1,1,0]。小指四个关节维持温和弯曲，未参与对象接触。
 - 默认训练/诊断/渲染配置切换到新物理配置。旧成功模型和GIF保留，README明确其物理约束缺失。38项测试通过。
 - 新物理DR以鲁棒姿态和新物理无DR教师开始训练，恢复±0.05N外力、±20%质量/摩擦/PD增益和±5cm/±15度位姿；保持逐轴硬件上限、重力和自碰撞。最终结果待独立验收。
+
+### 新物理域随机化最终闭环结果
+
+- 新物理DR教师训练524,288步，检查点 `outputs/rl/lift_physical_dr_v1/checkpoint-final.pt`。最初15步偏置渐变的独立seed=707/999验收510/512：两次失败均有短时>100N对象接触力（最大211.41N），虽然都成功抓起，仍按安全失败拒绝。
+- 保持硬件effort/velocity上限、PD基准、重力、自碰撞和100N安全阈值不变，仅把抓取偏置渐变从15步延长到25步（0.5秒→0.833秒）。这是训练后的控制参数校准，不冒充重新训练了权重；训练配置15步和校准后25步配置均保留。
+- 最终部署/评价配对：`configs/rl/wuji_hand2_apple_physical_robust_smooth_dr.yaml` + `outputs/rl/lift_physical_dr_v1/checkpoint-final.pt`。707/999两组各256回合全通过；再使用校准后新的seed=303，256/256通过。合计768/768严格通过；不能将有限种子样本解释为任意物理参数下必然成功。
+- 最终全部批量验证中，最小保持后抬升4.44cm；对象接触力最大78.18N。seed=303部分场景轻微非相邻自接触，最大0.723N，低于5N终止阈值；自碰撞没有关闭，也没有忽略这些接触。
+- 最终随机化seed=999单轨迹逐1712子步审计：20轴实际角度均在URDF范围内，实际速度均无超限，峰值4.330rad/s；非排除FCL凸网格自穿透0。小指实际末帧0.409/0.056/0.402/0.199rad，未接触苹果。单轨迹网格审计与批量接触力统计分开报告，不将单轨迹结果扩大为逐子步审计了全部768个场景。
+- 最终DR GIF重新以25步配置生成：峰值抬升6.23cm、保持后4.89cm，ADD9.96mm，参考四指保持覆盖率[1,1,1,1,0]；路径 `outputs/rl/diagnostics/lift_physical_four_fingers_dr_success.gif`。同seed独立网格审计与渲染终值有毫米内差别，未将GPU数值与随机采样差异单独归因；不改写任一原始测量。
+- 机器可读摘要、配置/检查点SHA256与三组原始结果位置写入 `docs/rl_physics_validation_results.json`。最终逐关节DR摘要 `docs/rl_physics_audit_dr_policy_final.json`；原15步审计保存为 `docs/rl_physics_audit_dr_ramp15.json`。
+- 保留范围限制：本次是首次抬升+1秒保持；手根仍按参考运动学驱动，未建模动力学手臂、内部齿轮、腱绳、柔性或间隙；未声称完成论文完整七次抓放及全部域随机化。PD显式需求仍为估算，不是实测隐式电机力矩。
+- 关键节点已本地提交1494955、61cb6c8、a0c64d9；仓库未配置Git远端，无法上传。不改动用户已有的 `outputs/morphology_initialization.json` 删除状态。

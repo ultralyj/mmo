@@ -206,11 +206,11 @@ This is a local extension of the paper's finger-count reward; use
   --config configs/rl/wuji_hand2_apple_physical_grasp.yaml \
   --output-dir outputs/rl/new_four_finger_run --gif-interval 0
 .venv/bin/python scripts/diagnose_lift.py \
-  --config configs/rl/wuji_hand2_apple_physical_robust_dr.yaml \
+  --config configs/rl/wuji_hand2_apple_physical_robust_smooth_dr.yaml \
   --checkpoint outputs/rl/lift_physical_dr_v1/checkpoint-final.pt \
   --num-envs 256 --seed 999 --output outputs/rl/diagnostics/new_four_finger_eval.json
 .venv/bin/python scripts/render_lift.py \
-  --config configs/rl/wuji_hand2_apple_physical_robust_dr.yaml \
+  --config configs/rl/wuji_hand2_apple_physical_robust_smooth_dr.yaml \
   --checkpoint outputs/rl/lift_physical_dr_v1/checkpoint-final.pt \
   --seed 999 --output outputs/rl/diagnostics/new_four_finger_success.gif
 ```
@@ -235,3 +235,14 @@ These files validate the first lift and a one-second hold, with a prescribed
 floating wrist and a rigid hand model. Gears, tendons, backlash and a dynamic
 arm are outside the model. Detailed measured angles, speeds and collision
 checks are in the local physics audit documents.
+
+The final randomized evaluation uses
+`configs/rl/wuji_hand2_apple_physical_robust_smooth_dr.yaml` with
+`outputs/rl/lift_physical_dr_v1/checkpoint-final.pt`. A post-training ramp
+calibration (15 to 25 control steps) eliminated the observed contact-force
+spikes without changing drive limits or collision filters. Strict lift and
+hold checks passed 768/768 episodes across seeds 303, 707 and 999; seed 303
+was new after calibration. The final randomized GIF is
+`outputs/rl/diagnostics/lift_physical_four_fingers_dr_success.gif`.
+See [measured validation results](docs/rl_physics_validation_results.json)
+and [per-joint randomized audit](docs/rl_physics_audit_dr_policy_final.json).

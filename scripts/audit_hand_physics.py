@@ -1,6 +1,7 @@
 """Record actual substep motion and mesh self-overlap, not just task success."""
 import argparse
 import json
+from dataclasses import replace
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -19,12 +20,15 @@ parser.add_argument('--config', default='configs/rl/wuji_hand2_apple_fingers.yam
 parser.add_argument('--checkpoint')
 parser.add_argument('--output', default='outputs/rl/diagnostics/physics_audit_legacy.json')
 parser.add_argument('--backend', default='gpu')
+parser.add_argument('--seed', type=int, default=101)
 args = parser.parse_args()
-c = load_residual_rl_config(args.config); reference = load_reference(c)
+c = load_residual_rl_config(args.config)
+c = replace(c, ppo=replace(c.ppo, seed=args.seed))
+reference = load_reference(c)
 env = ResidualActionWrapper(MorphometricResidualEnv(reference=reference, config=c,
                             num_envs=1, sim_backend=args.backend))
 base = env.unwrapped
-observation, _ = env.reset(seed=101)
+observation, _ = env.reset(seed=args.seed)
 policy = None
 if args.checkpoint:
     checkpoint = torch.load(args.checkpoint, map_location=base.device, weights_only=False)
@@ -117,7 +121,7 @@ try:
                             configured_effort_to_urdf_ratio=settings[k]['force_limit']/l['effort']))
     result=dict(articulation_solver_position_iterations=base.agent.robot._objs[0].solver_position_iterations,
                 articulation_solver_velocity_iterations=base.agent.robot._objs[0].solver_velocity_iterations,
-                config=args.config,checkpoint=args.checkpoint,backend=args.backend,
+                config=args.config,checkpoint=args.checkpoint,backend=args.backend,seed=args.seed,
                 drive_settings=settings,collision_shapes=shape_records,joints=summary,
                 worst_self_penetration_m=worst_depth,
                 nonexcluded_self_overlaps=sorted(collisions.items(),key=lambda x:-x[1]),

@@ -44,5 +44,87 @@
       "finger_match_success": true
     }
   },
-  "scope": "First lift plus 1 s hold; prescribed wrist; rigid URDF shells, without gears/tendons/backlash."
+  "scope": "First lift plus 1 s hold; prescribed wrist; rigid URDF shells, without gears/tendons/backlash.",
+  "randomized": {
+    "config": "configs/rl/wuji_hand2_apple_physical_robust_smooth_dr.yaml",
+    "checkpoint": "outputs/rl/lift_physical_dr_v1/checkpoint-final.pt",
+    "checkpoint_sha256": "155096cd27e41ce01b7fa255e9783fa68ba06731a6fd70c17a678c91d331ecea",
+    "config_sha256": "e6c8c629533082b2f8b10011b61e89ad2c128aa2d84b7ce102515039f1752022",
+    "post_training_calibration": "Grasp ramp changed from 15 to 25 control steps after training; weights unchanged. Seeds 707 and 999 were used to assess calibration, seed 303 is a fresh validation.",
+    "evaluations": [
+      {
+        "seed": 303,
+        "episodes": 256,
+        "success": 256,
+        "strict_success": 256,
+        "final_lift_range_m": [
+          0.04461047053337097,
+          0.049599871039390564
+        ],
+        "maximum_object_contact_force_n": 59.90052032470703,
+        "maximum_self_contact_force_n": 0.7232943773269653,
+        "raw_result": "outputs/rl/diagnostics/physical_dr_smooth_303.json"
+      },
+      {
+        "seed": 707,
+        "episodes": 256,
+        "success": 256,
+        "strict_success": 256,
+        "final_lift_range_m": [
+          0.04474325478076935,
+          0.049933962523937225
+        ],
+        "maximum_object_contact_force_n": 35.00905990600586,
+        "maximum_self_contact_force_n": 0.0,
+        "raw_result": "outputs/rl/diagnostics/physical_dr_smooth_707.json"
+      },
+      {
+        "seed": 999,
+        "episodes": 256,
+        "success": 256,
+        "strict_success": 256,
+        "final_lift_range_m": [
+          0.04439053684473038,
+          0.050284601747989655
+        ],
+        "maximum_object_contact_force_n": 78.18437194824219,
+        "maximum_self_contact_force_n": 0.0,
+        "raw_result": "outputs/rl/diagnostics/physical_dr_smooth_999.json"
+      }
+    ],
+    "strict_success": 768,
+    "episodes": 768,
+    "gif": {
+      "success": true,
+      "seed": 999,
+      "checkpoint": "outputs/rl/lift_physical_dr_v1/checkpoint-final.pt",
+      "peak_lift_m": 0.06226107478141785,
+      "final_lift_m": 0.04886219650506973,
+      "final_add_m": 0.009957375004887581,
+      "failed": false,
+      "finger_order": [
+        "thumb",
+        "index",
+        "middle",
+        "ring",
+        "pinky"
+      ],
+      "hold_contact_fraction": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0
+      ],
+      "final_finger_force_n": [
+        3.7250397205352783,
+        1.628206491470337,
+        1.6529946327209473,
+        1.6806243658065796,
+        0.0
+      ],
+      "finger_match_success": true
+    },
+    "audit": "docs/rl_physics_audit_dr_policy_final.json"
+  }
 }
