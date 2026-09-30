@@ -327,6 +327,9 @@ class PPOTrainer:
             encoding="utf-8",
         )
 
+        (output / "environment_config.json").write_text(
+            json.dumps(asdict(self.base_env.config), indent=2), encoding="utf-8"
+        )
         observation, _ = self.env.reset(
             seed=self.config.seed
         )

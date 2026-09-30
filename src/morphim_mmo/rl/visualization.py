@@ -59,9 +59,10 @@ def _annotate_frame(
     lines = [
         f"step {step}   reward {reward:.3f}",
         f"ADD {add:.3f} m   contacting fingers {contact}",
+        f"height {float(info.get('object_height', torch.zeros(1))[0]):.3f} m   lift {100 * float(info.get('object_lift', torch.zeros(1))[0]):.1f} cm",
         "termination: " + (", ".join(reasons) if reasons else "none"),
     ]
-    draw.rectangle((8, 8, 405, 70), fill=(0, 0, 0))
+    draw.rectangle((8, 8, 450, 88), fill=(0, 0, 0))
     draw.multiline_text((14, 12), "\n".join(lines), fill=(255, 255, 255), spacing=3)
     return image
 

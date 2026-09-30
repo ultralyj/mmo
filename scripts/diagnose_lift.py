@@ -1,26 +1,107 @@
-"""Measure complete physical rollouts; never move the dynamic object manually."""
-import argparse, json
+"""Evaluate complete physical episodes without moving the object after reset."""
+import argparse
+import json
+from dataclasses import replace
 from pathlib import Path
+
 import torch
+
 from morphim_mmo.rl.config import load_residual_rl_config
-from morphim_mmo.rl.reference import ResidualRLReference
 from morphim_mmo.rl.environment import MorphometricResidualEnv, ResidualActionWrapper
+from morphim_mmo.rl.ppo import ActorCritic, _single_env_action_limit
+from morphim_mmo.rl.reference import ResidualRLReference
 
 
 def load_reference(config):
-    return ResidualRLReference.load(robot_pose_path='outputs/wuji_hand2/robot_pose_full_safe.npz', contacts_path='../data/processed/s1/apple_lift_contacts.npz', robot_config_path='configs/wuji_hand2_beta2_right.yaml', mano_dir='../data/models/mano/mano_v1_2/models', object_mesh_path='../data/raw/grab/tools/object_meshes/contact_meshes/apple.ply', reference_stride=config.control.reference_stride)
+    return ResidualRLReference.load(
+        robot_pose_path="outputs/wuji_hand2/robot_pose_full_safe.npz",
+        contacts_path="../data/processed/s1/apple_lift_contacts.npz",
+        robot_config_path="configs/wuji_hand2_beta2_right.yaml",
+        mano_dir="../data/models/mano/mano_v1_2/models",
+        object_mesh_path="../data/raw/grab/tools/object_meshes/contact_meshes/apple.ply",
+        reference_stride=config.control.reference_stride,
+        reference_end_step=config.control.reference_end_step,
+        hold_steps=config.control.hold_steps,
+    )
 
 
 def main():
-    p=argparse.ArgumentParser(); p.add_argument('--config',default='configs/rl/wuji_hand2_apple.yaml'); p.add_argument('--output',default='outputs/rl/diagnostics/baseline.json'); p.add_argument('--num-envs',type=int,default=16); a=p.parse_args()
-    c=load_residual_rl_config(a.config); r=load_reference(c)
-    e=ResidualActionWrapper(MorphometricResidualEnv(reference=r,config=c,num_envs=a.num_envs,sim_backend='gpu'))
-    e.reset(seed=1); b=e.unwrapped; z0=b.object.pose.p[:,2].clone(); peak=z0.clone(); failed=torch.zeros(a.num_envs,dtype=torch.bool,device=b.device); rows=[]
-    with torch.no_grad():
-        for t in range(r.frame_count):
-            _,reward,term,trunc,info=e.step(torch.zeros((a.num_envs,20),device=b.device)); failed |= term; peak=torch.maximum(peak,b.object.pose.p[:,2]);
-            if t%25==0 or t==r.frame_count-1:
-                row={'step':t,'height':float(b.object.pose.p[:,2].mean()),'reference_height':float(b._object_pose_for_step(b._active_step)[:,2].mean()),'add':float(info['add_error'].mean()),'fingers':float(info['observed_contact'].float().sum(-1).mean()),'force':float(info['maximum_object_contact_force'].max()),'failed':int(failed.sum())}; rows.append(row); print(row,flush=True)
-    result={'initial_height_m':float(z0.mean()),'peak_lift_m':(peak-z0).tolist(),'final_height_m':b.object.pose.p[:,2].tolist(),'success':(info['success'] & ~failed).tolist(),'rows':rows}
-    path=Path(a.output); path.parent.mkdir(parents=True,exist_ok=True); path.write_text(json.dumps(result,indent=2)); e.close()
-if __name__=='__main__': main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="configs/rl/wuji_hand2_apple.yaml")
+    parser.add_argument("--output", default="outputs/rl/diagnostics/baseline.json")
+    parser.add_argument("--checkpoint")
+    parser.add_argument("--num-envs", type=int, default=128)
+    parser.add_argument("--seed", type=int, default=101)
+    args = parser.parse_args()
+    config = load_residual_rl_config(args.config)
+    config = replace(config, ppo=replace(config.ppo, seed=args.seed))
+    reference = load_reference(config)
+    env = ResidualActionWrapper(MorphometricResidualEnv(
+        reference=reference, config=config, num_envs=args.num_envs, sim_backend="gpu"))
+    try:
+        observation, _ = env.reset(seed=args.seed)
+        base = env.unwrapped
+        policy = None
+        if args.checkpoint:
+            checkpoint = torch.load(args.checkpoint, map_location=base.device, weights_only=False)
+            policy = ActorCritic(
+                observation.shape[-1], 20, tuple(checkpoint["config"]["hidden_sizes"]),
+                _single_env_action_limit(env.action_space.high, 20, base.device)).to(base.device)
+            policy.load_state_dict(checkpoint["policy"])
+            policy.eval()
+        initial_height = base.object.pose.p[:, 2].clone()
+        peak = initial_height.clone()
+        failed = torch.zeros(args.num_envs, dtype=torch.bool, device=base.device)
+        max_force = torch.zeros(args.num_envs, device=base.device)
+        min_clearance = torch.full_like(max_force, float("inf"))
+        rows = []
+        with torch.no_grad():
+            for step in range(reference.frame_count):
+                action = torch.zeros((args.num_envs, 20), device=base.device)
+                if policy is not None:
+                    action = policy.action_limit * torch.tanh(policy.forward(observation)[0].mean)
+                observation, reward, terminated, truncated, info = env.step(action)
+                failed |= info["fail"]
+                peak = torch.maximum(peak, base.object.pose.p[:, 2])
+                max_force = torch.maximum(max_force, info["maximum_object_contact_force"])
+                min_clearance = torch.minimum(min_clearance, info["table_clearance"])
+                row = {
+                    "step": step,
+                    "height": float(base.object.pose.p[:, 2].mean()),
+                    "reference_height": float(base._object_pose_for_step(base._active_step)[:, 2].mean()),
+                    "add": float(info["add_error"].mean()),
+                    "fingers": float(info["observed_contact"].float().sum(-1).mean()),
+                    "force": float(info["maximum_object_contact_force"].max()),
+                    "failed": int(failed.sum()),
+                    "clearance": float(info["table_clearance"].min()),
+                }
+                rows.append(row)
+                if step % 25 == 0 or step == reference.frame_count - 1:
+                    print(row, flush=True)
+        success = info["success"] & ~failed
+        final_lift = base.object.pose.p[:, 2] - initial_height
+        # In addition to the paper criterion, insist on sustained physical lift.
+        lift_success = success & (final_lift >= 0.04)
+        result = {
+            "seed": args.seed, "checkpoint": args.checkpoint,
+            "config": args.config, "frames": reference.frame_count,
+            "initial_height_m": float(initial_height.mean()),
+            "peak_lift_m": (peak - initial_height).tolist(),
+            "final_lift_m": final_lift.tolist(),
+            "final_height_m": base.object.pose.p[:, 2].tolist(),
+            "final_add_m": info["add_error"].tolist(),
+            "max_contact_force_n": max_force.tolist(),
+            "minimum_table_clearance_m": min_clearance.tolist(),
+            "success": success.tolist(), "lift_success": lift_success.tolist(),
+            "rows": rows,
+        }
+        path = Path(args.output)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(result, indent=2))
+        print(f"Success: {int(success.sum())}/{args.num_envs}; sustained >=4cm: {int(lift_success.sum())}/{args.num_envs}")
+    finally:
+        env.close()
+
+
+if __name__ == "__main__":
+    main()

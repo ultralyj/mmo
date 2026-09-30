@@ -205,7 +205,7 @@ class MorphometricResidualEnv(BaseEnv):
             self.reference.base_pose_position_wxyz,
             dtype=torch.float32,
             device=device,
-        )
+        ).clone()
         self._reference_object_pose = torch.as_tensor(
             self.reference.object_pose_position_wxyz,
             dtype=torch.float32,
@@ -230,6 +230,10 @@ class MorphometricResidualEnv(BaseEnv):
             self.config.control.grasp_release_decay,
         )
         self._reference_qpos += grasp_gate[:, None] * grasp_bias[None, :]
+        wrist_bias = torch.as_tensor(self.config.control.wrist_bias_m, device=device)
+        if wrist_bias.shape != (3,):
+            raise ValueError("wrist_bias_m must have three entries")
+        self._reference_base_pose[:, :3] += grasp_gate[:, None] * wrist_bias
         self._reference_table_height = torch.as_tensor(
             self.reference.table_height_m, dtype=torch.float32, device=device
         )
@@ -285,6 +289,7 @@ class MorphometricResidualEnv(BaseEnv):
             dtype=torch.float32,
             device=device,
         )
+        self._initial_object_height = torch.zeros(self.num_envs, device=device)
         self._termination_state = TerminationState.zeros(self.num_envs, device)
         self._robot_links = tuple(self.agent.robot.links)
         urdf = yourdfpy.URDF.load(
@@ -385,6 +390,7 @@ class MorphometricResidualEnv(BaseEnv):
             half_size=(float(table_half[0]), float(table_half[1]), 0.01)
         )
         self.table = table_builder.build_static("table")
+        self._randomize_scene_physics()
         if self.scene.gpu_sim_enabled:
             object_pairs = []
             table_pairs = []
@@ -408,6 +414,45 @@ class MorphometricResidualEnv(BaseEnv):
                 )
                 for links in self._finger_links
             )
+
+    def _randomize_scene_physics(self) -> None:
+        """Sample physical parameters before PhysX GPU buffers are initialized.
+
+        Parameters persist per scene; episode position/yaw and forces are
+        resampled separately. Rebuilding with a new seed samples new physics.
+        """
+        randomization = self.config.randomization
+        if not randomization.enabled:
+            return
+        rng = np.random.default_rng(self.config.ppo.seed)
+        for bounds in (randomization.mass_scale_range,
+                       randomization.friction_scale_range,
+                       randomization.pd_gain_scale_range):
+            if len(bounds) != 2 or not 0 < bounds[0] <= bounds[1]:
+                raise ValueError("physical randomization ranges must be positive ordered pairs")
+        for index, body in enumerate(self.object._bodies):
+            mass_scale = rng.uniform(*randomization.mass_scale_range)
+            friction_scale = rng.uniform(*randomization.friction_scale_range)
+            gain_scale = rng.uniform(*randomization.pd_gain_scale_range)
+            body.mass *= mass_scale
+            body.inertia = np.asarray(body.inertia) * mass_scale
+            self._object_mass[index] = body.mass
+            self._object_friction[index] = self.config.physics.object_friction * friction_scale
+            material = physx.PhysxMaterial(
+                static_friction=float(self._object_friction[index]),
+                dynamic_friction=float(self._object_friction[index]), restitution=0.0)
+            for shape in body.collision_shapes:
+                shape.physical_material = material
+            articulation = self.agent.robot._objs[index]
+            hand_friction = self.config.physics.hand_friction * rng.uniform(*randomization.friction_scale_range)
+            hand_material = physx.PhysxMaterial(static_friction=hand_friction, dynamic_friction=hand_friction, restitution=0.0)
+            for link in articulation.links:
+                for shape in link.collision_shapes:
+                    shape.physical_material = hand_material
+            for joint in articulation.active_joints:
+                joint.set_drive_properties(self.config.control.stiffness * gain_scale,
+                                           self.config.control.damping * gain_scale,
+                                           force_limit=self.config.control.force_limit)
 
     def _transformed_pose(
         self,
@@ -564,6 +609,9 @@ class MorphometricResidualEnv(BaseEnv):
         return {
             **reward,
             "add_error": add_error,
+            "object_height": observed_pose[:, 2],
+            "object_lift": observed_pose[:, 2] - self._initial_object_height,
+            "reference_object_height": reference_pose[:, 2],
             "observed_contact": observed_contact,
             "maximum_object_contact_force": maximum_object_force,
             "table_contact_force": table_force,
@@ -641,6 +689,7 @@ class MorphometricResidualEnv(BaseEnv):
             )
         )
 
+        self._initial_object_height[env_idx] = object_pose[:, 2]
         # Pose reset does not clear dynamic-body momentum in SAPIEN.
         self.object.set_linear_velocity(torch.zeros((len(env_idx), 3), device=self.device))
         self.object.set_angular_velocity(torch.zeros((len(env_idx), 3), device=self.device))
@@ -721,6 +770,9 @@ class MorphometricResidualEnv(BaseEnv):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict]:
         result = super().step(action)
         observation, reward, terminated, truncated, info = result
+        # BaseEnv treats success as termination. Here only failures terminate;
+        # reaching the reference horizon is an explicit task truncation.
+        terminated = info["fail"].clone()
         truncated = torch.logical_or(
             truncated, self._active_step >= self.reference.frame_count - 1
         )

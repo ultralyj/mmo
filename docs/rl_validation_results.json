@@ -1,0 +1,36 @@
+{
+  "lift_final_eval": {
+    "seed": 101,
+    "checkpoint": "outputs/rl/lift_fixed_v1/checkpoint-final.pt",
+    "config": "configs/rl/wuji_hand2_apple.yaml",
+    "frames": 107,
+    "episodes": 256,
+    "success_rate": 1.0,
+    "sustained_lift_success_rate": 1.0,
+    "peak_lift_mean_m": 0.06650508844177239,
+    "peak_lift_min_m": 0.06578847765922546,
+    "final_lift_mean_m": 0.05116846098098904,
+    "final_lift_min_m": 0.049664437770843506,
+    "final_add_mean_m": 0.015328828187193722,
+    "maximum_contact_force_n": 14.355635643005371,
+    "minimum_table_clearance_m": 0.00717918761074543,
+    "checkpoint_sha256": "db515e8d9667c7e8f06c6fcf462a7faa176c9fe744bf6f86f27e9a6d71ff1df0"
+  },
+  "dr_final_eval": {
+    "seed": 303,
+    "checkpoint": "outputs/rl/lift_dr_v1/checkpoint-final.pt",
+    "config": "configs/rl/wuji_hand2_apple_dr.yaml",
+    "frames": 107,
+    "episodes": 256,
+    "success_rate": 1.0,
+    "sustained_lift_success_rate": 1.0,
+    "peak_lift_mean_m": 0.0649597194569651,
+    "peak_lift_min_m": 0.06264100968837738,
+    "final_lift_mean_m": 0.04951358833932318,
+    "final_lift_min_m": 0.046991027891635895,
+    "final_add_mean_m": 0.015187355864327401,
+    "maximum_contact_force_n": 22.07215118408203,
+    "minimum_table_clearance_m": 0.0072093140333890915,
+    "checkpoint_sha256": "6fabfe86af78543793f9c90d21388091e45f6091a3e18ae2b2a953ddbc50a453"
+  }
+}

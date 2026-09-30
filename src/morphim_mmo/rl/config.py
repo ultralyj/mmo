@@ -45,6 +45,9 @@ class ControlConfig:
     grasp_contact_lookahead_steps: int
     grasp_min_contact_fingers: int
     grasp_release_decay: float
+    wrist_bias_m: tuple[float, ...] = (0.0, 0.0, 0.0)
+    reference_end_step: int | None = None
+    hold_steps: int = 0
 
 
 @dataclass(frozen=True)
@@ -66,6 +69,9 @@ class RandomizationConfig:
     object_yaw_range_rad: float
     random_start: bool
     external_force_range_n: float
+    mass_scale_range: tuple[float, float] = (1.0, 1.0)
+    friction_scale_range: tuple[float, float] = (1.0, 1.0)
+    pd_gain_scale_range: tuple[float, float] = (1.0, 1.0)
 
 
 @dataclass(frozen=True)

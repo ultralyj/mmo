@@ -7,7 +7,10 @@ Optimization used before reinforcement learning:
 2. per-frame contact matching with contact, table, and pose losses;
 3. heat-diffused robot targets and sequential robot pose recovery with IK.
 
-Reinforcement learning is intentionally out of scope for this milestone.
+Residual reinforcement learning now supports a validated Wuji Hand2 apple
+lift-and-hold task and a subsequent domain-randomization stage. See
+[the repair log](docs/rl_repair_log.md) for measured results, reproduction
+commands, checkpoints, and the limits of the hand-only setup.
 
 ## Code layout
 

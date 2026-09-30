@@ -54,6 +54,7 @@ def main() -> None:
         type=float,
         help="override the initial Gaussian policy log standard deviation",
     )
+    parser.add_argument("--checkpoint", type=Path, help="warm-start policy weights for the next curriculum stage")
     parser.add_argument("--sim-backend", default="auto")
     parser.add_argument("--checkpoint-interval", type=int, default=10)
     parser.add_argument(
@@ -88,6 +89,8 @@ def main() -> None:
         mano_dir=args.mano_dir,
         object_mesh_path=args.object_mesh,
         reference_stride=config.control.reference_stride,
+        reference_end_step=config.control.reference_end_step,
+        hold_steps=config.control.hold_steps,
     )
     environment = MorphometricResidualEnv(
         reference=reference,
@@ -123,6 +126,10 @@ def main() -> None:
             )
 
     trainer = PPOTrainer(environment, config.ppo)
+    if args.checkpoint is not None:
+        import torch
+        checkpoint = torch.load(args.checkpoint, map_location=trainer.device, weights_only=False)
+        trainer.policy.load_state_dict(checkpoint["policy"])
     try:
         trainer.train(
             output_dir=args.output_dir,

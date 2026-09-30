@@ -112,6 +112,8 @@ class ResidualRLReference:
         object_mesh_path: str | Path,
         reference_stride: int,
         object_point_count: int = 512,
+        reference_end_step: int | None = None,
+        hold_steps: int = 0,
     ) -> "ResidualRLReference":
         """Load, synchronize, subsample, and table-normalize MMO references."""
 
@@ -169,8 +171,20 @@ class ResidualRLReference:
         table_min = table_world[:, :2].min(axis=0)
         table_max = table_world[:, :2].max(axis=0)
         selected = np.arange(0, len(robot["timestamp_s"]), reference_stride)
+        if reference_end_step is not None:
+            if not 1 <= reference_end_step <= len(selected):
+                raise ValueError("reference_end_step outside subsampled trajectory")
+            selected = selected[:reference_end_step]
+        if hold_steps < 0:
+            raise ValueError("hold_steps must be nonnegative")
+        if hold_steps:
+            selected = np.concatenate([selected, np.repeat(selected[-1], hold_steps)])
+        timestamps = np.asarray(robot["timestamp_s"])[selected].copy()
+        if hold_steps:
+            dt = reference_stride * float(np.median(np.diff(robot["timestamp_s"])))
+            timestamps[-hold_steps:] = timestamps[-hold_steps - 1] + dt * np.arange(1, hold_steps + 1)
         return cls(
-            timestamp_s=np.asarray(robot["timestamp_s"])[selected],
+            timestamp_s=timestamps,
             joint_names=robot_joint_names,
             qpos=np.asarray(
                 robot["joint_positions_rad"], dtype=np.float32

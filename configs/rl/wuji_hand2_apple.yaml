@@ -1,23 +1,15 @@
-# Morphometric Imitation residual-RL configuration for Wuji Hand2 + apple.
-# The paper specifies the form of the observation, reward, termination, and
-# randomization, but does not publish the numeric values below. Every value is
-# therefore a reproduction assumption until official supplementary code/configs
-# become available.
-
+# Reproduction configuration: first apple lift followed by a 1s hold.
+# Numeric grasp/wrist corrections selected with real PhysX rollouts.
 reward:
   add_alpha: 50.0
   final_add_success_m: 0.05
   contact_force_threshold_n: 0.01
-
 termination:
   ema_decay: 0.95
   add_ema_threshold_m: 0.08
   contact_mismatch_ema_threshold: 0.8
-  # The zero-residual reference peaks near 48 N. Leave exploration headroom
-  # during the deterministic debugging stage.
   maximum_contact_force_n: 100.0
   table_collision_force_n: 1.0
-
 control:
   simulation_frequency_hz: 120
   control_frequency_hz: 30
@@ -27,38 +19,53 @@ control:
   stiffness: 200.0
   damping: 10.0
   force_limit: 5.0
-  # Robot-specific contact preshape found by batched dynamics validation. The
-  # raw MMO skeleton trajectory makes contact but cannot form force closure.
-  # This bias is activated shortly before >=3-finger reference contact and is
-  # still refined by the policy's bounded residual action.
-  grasp_bias_rad: [0.1844, 0.1412, -0.1116, -0.2255, 0.1707, 0.1717, -0.1681, -0.1978, 0.2231, -0.0573, -0.1885, 0.1079, 0.0926, 0.1236, -0.1666, -0.1504, 0.0524, 0.2307, 0.2493, -0.0174]
+  grasp_bias_rad:
+  - 0.0335991
+  - -0.1741245
+  - -0.5928542
+  - -0.0298714
+  - -0.0407109
+  - 0.2922299
+  - -0.0301275
+  - -0.3078927
+  - 0.1372347
+  - -0.1550264
+  - -0.1408983
+  - 0.2111982
+  - -0.0263887
+  - 0.0381726
+  - -0.2030762
+  - 0.0918638
+  - 0.2985081
+  - 0.4987255
+  - 0.1714334
+  - -0.074811
   grasp_contact_lookahead_steps: 20
   grasp_min_contact_fingers: 3
   grasp_release_decay: 0.9
-
+  wrist_bias_m:
+  - 0.015609261579811573
+  - -0.01165647804737091
+  - -0.014706362970173359
+  reference_end_step: 77
+  hold_steps: 30
 physics:
   object_mass_kg: 0.15
   object_friction: 0.8
   hand_friction: 1.0
   table_friction: 0.8
-
 randomization:
-  # The paper specifies a 10 cm x 10 cm initial-position region and +/-15 deg yaw.
-  # Disabled until the deterministic hand-only pipeline is verified.
   enabled: false
   object_position_range_m: 0.05
   object_yaw_range_rad: 0.2617993878
   random_start: false
-  # The paper does not publish the external-force magnitude. This small value is
-  # a conservative reproduction assumption for the first debugging stage.
   external_force_range_n: 0.0
-
 ppo:
   seed: 1
   num_envs: 512
   rollout_steps: 128
-  total_timesteps: 5000000
-  learning_rate: 0.0003
+  total_timesteps: 1048576
+  learning_rate: 0.0001
   gamma: 0.99
   gae_lambda: 0.95
   clip_coefficient: 0.2
@@ -67,6 +74,7 @@ ppo:
   max_gradient_norm: 0.5
   update_epochs: 4
   minibatches: 8
-  hidden_sizes: [256, 256]
-  # Start close to the MMO reference: 0.25 * exp(-2) ~= 0.034 rad.
-  initial_log_std: -2.0
+  hidden_sizes:
+  - 256
+  - 256
+  initial_log_std: -3.0

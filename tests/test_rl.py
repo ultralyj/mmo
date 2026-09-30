@@ -89,3 +89,22 @@ def test_grasp_bias_gate_anticipates_contact_and_releases_smoothly() -> None:
     torch.testing.assert_close(
         gate, torch.tensor([0.0, 0.0, 1.0, 1.0, 1.0, 0.5, 0.25, 0.125])
     )
+
+
+def test_success_at_reference_horizon_is_truncation_not_failure(monkeypatch) -> None:
+    """ManiSkill's success termination must not contaminate failure statistics."""
+    from types import SimpleNamespace
+    from mani_skill.envs.sapien_env import BaseEnv
+    from morphim_mmo.rl.environment import MorphometricResidualEnv
+
+    env = MorphometricResidualEnv.__new__(MorphometricResidualEnv)
+    env.reference = SimpleNamespace(frame_count=3)
+    env._active_step = torch.tensor([2, 1])
+    monkeypatch.setattr(BaseEnv, "step", lambda self, action: (
+        torch.zeros(2, 1), torch.ones(2), torch.tensor([True, True]),
+        torch.tensor([False, False]),
+        {"fail": torch.tensor([False, True]), "success": torch.tensor([True, False])},
+    ))
+    _, _, terminated, truncated, _ = env.step(torch.zeros(2, 20))
+    torch.testing.assert_close(terminated, torch.tensor([False, True]))
+    torch.testing.assert_close(truncated, torch.tensor([True, False]))
