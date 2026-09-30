@@ -54,6 +54,7 @@ def average_distance_error(
 def contact_matching_reward(
     observed_contact: torch.Tensor,
     reference_contact: torch.Tensor,
+    mode: str = "count",
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Compute equation 14 using counts of contacting robot and human fingers."""
 
@@ -63,7 +64,12 @@ def contact_matching_reward(
     observed_count = observed_contact.to(torch.float32).sum(dim=-1)
     human_count = reference_contact.to(torch.float32).sum(dim=-1)
     goal_count = torch.clamp(human_count, max=float(maximum_fingers))
-    mismatch = torch.abs(goal_count - observed_count) / float(maximum_fingers)
+    if mode == "count":
+        mismatch = torch.abs(goal_count - observed_count) / float(maximum_fingers)
+    elif mode == "per_finger":
+        mismatch = (observed_contact.bool() != reference_contact.bool()).float().mean(dim=-1)
+    else:
+        raise ValueError(f"unsupported contact reward mode: {mode}")
     return 1.0 - mismatch, mismatch, goal_count
 
 
@@ -72,11 +78,12 @@ def morphometric_reward(
     observed_contact: torch.Tensor,
     reference_contact: torch.Tensor,
     alpha: float,
+    contact_mode: str = "count",
 ) -> dict[str, torch.Tensor]:
     """Compute the paper's multiplicative residual-RL reward."""
 
     contact_reward, mismatch, goal_count = contact_matching_reward(
-        observed_contact, reference_contact
+        observed_contact, reference_contact, contact_mode
     )
     object_reward = torch.exp(-alpha * add_error)
     return {

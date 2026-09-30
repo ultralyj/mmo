@@ -16,6 +16,8 @@ class RewardConfig:
     add_alpha: float
     final_add_success_m: float
     contact_force_threshold_n: float
+    contact_mode: str = "count"
+    require_reference_contact: bool = False
 
 
 @dataclass(frozen=True)

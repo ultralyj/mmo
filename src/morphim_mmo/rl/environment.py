@@ -521,14 +521,11 @@ class MorphometricResidualEnv(BaseEnv):
                 / self.scene.px.timestep
             )
             object_force_norm = torch.linalg.vector_norm(object_forces, dim=-1)
-            finger_contact = torch.stack(
-                [
-                    object_force_norm[:, indices].amax(dim=-1)
-                    > self.config.reward.contact_force_threshold_n
-                    for indices in self._finger_link_indices
-                ],
+            finger_force = torch.stack(
+                [object_force_norm[:, indices].amax(dim=-1) for indices in self._finger_link_indices],
                 dim=-1,
             )
+            finger_contact = finger_force > self.config.reward.contact_force_threshold_n
             maximum_object_force = object_force_norm.amax(dim=-1)
 
             self.scene.px.gpu_query_contact_pair_impulses(
@@ -550,11 +547,13 @@ class MorphometricResidualEnv(BaseEnv):
                 dtype=torch.bool,
                 device=self.device,
             )
+            finger_force = torch.zeros((self.num_envs, len(self._finger_links)), device=self.device)
             maximum_object_force = torch.zeros(self.num_envs, device=self.device)
             for finger_index, links in enumerate(self._finger_links):
                 for link in links:
                     force = self.scene.get_pairwise_contact_forces(link, self.object)
                     force_norm = torch.linalg.vector_norm(force, dim=-1)
+                    finger_force[:, finger_index] = torch.maximum(finger_force[:, finger_index], force_norm)
                     finger_contact[:, finger_index] |= (
                         force_norm > self.config.reward.contact_force_threshold_n
                     )
@@ -568,6 +567,7 @@ class MorphometricResidualEnv(BaseEnv):
                     table_force, torch.linalg.vector_norm(force, dim=-1)
                 )
 
+        self._finger_contact_force = finger_force
         poses = torch.stack(
             [link.pose.raw_pose for link in self._surface_links], dim=1
         )
@@ -605,6 +605,7 @@ class MorphometricResidualEnv(BaseEnv):
             observed_contact,
             reference_contact,
             self.config.reward.add_alpha,
+            self.config.reward.contact_mode,
         )
         return {
             **reward,
@@ -613,6 +614,8 @@ class MorphometricResidualEnv(BaseEnv):
             "object_lift": observed_pose[:, 2] - self._initial_object_height,
             "reference_object_height": reference_pose[:, 2],
             "observed_contact": observed_contact,
+            "reference_contact": reference_contact,
+            "finger_contact_force": self._finger_contact_force.clone(),
             "maximum_object_contact_force": maximum_object_force,
             "table_contact_force": table_force,
             "minimum_robot_height": minimum_height,
@@ -794,6 +797,8 @@ class MorphometricResidualEnv(BaseEnv):
             & metrics["observed_contact"].any(dim=-1)
             & (metrics["add_error"] <= self.config.reward.final_add_success_m)
         )
+        if self.config.reward.require_reference_contact:
+            success &= (metrics["observed_contact"] == self._reference_contact[self._active_step]).all(dim=-1)
         return {
             **metrics,
             **reasons,

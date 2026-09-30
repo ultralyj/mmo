@@ -1,0 +1,82 @@
+# Local extension: per-finger reward and exact final reference contact.
+# Four-finger preshape selected with real GPU PhysX lift-and-hold rollouts.
+reward:
+  add_alpha: 50.0
+  final_add_success_m: 0.05
+  contact_force_threshold_n: 0.01
+  contact_mode: per_finger
+  require_reference_contact: true
+termination:
+  ema_decay: 0.95
+  add_ema_threshold_m: 0.08
+  contact_mismatch_ema_threshold: 0.8
+  maximum_contact_force_n: 100.0
+  table_collision_force_n: 1.0
+control:
+  simulation_frequency_hz: 120
+  control_frequency_hz: 30
+  reference_stride: 4
+  future_steps: 4
+  residual_limit_rad: 0.25
+  stiffness: 200.0
+  damping: 10.0
+  force_limit: 5.0
+  grasp_bias_rad:
+  - 0.19363504
+  - 0.04023861
+  - -0.25306642
+  - -0.12582689
+  - -0.68823216
+  - 0.12161661
+  - -0.23507223
+  - -0.74110686
+  - 0.21407608
+  - 0.04119154
+  - -0.33029584
+  - 0.25382708
+  - 0.26628632
+  - 0.56112623
+  - -0.35446432
+  - -0.08119063
+  - 0.53989611
+  - 0.67346595
+  - 0.13856125
+  - -0.19616475
+  grasp_contact_lookahead_steps: 20
+  grasp_min_contact_fingers: 3
+  grasp_release_decay: 0.9
+  wrist_bias_m:
+  - 0.015957055613398552
+  - -0.002423759549856186
+  - -0.015524876187555492
+  reference_end_step: 77
+  hold_steps: 30
+physics:
+  object_mass_kg: 0.15
+  object_friction: 0.8
+  hand_friction: 1.0
+  table_friction: 0.8
+randomization:
+  enabled: false
+  object_position_range_m: 0.05
+  object_yaw_range_rad: 0.2617993878
+  random_start: false
+  external_force_range_n: 0.0
+ppo:
+  seed: 1
+  num_envs: 256
+  rollout_steps: 128
+  total_timesteps: 1048576
+  learning_rate: 0.0001
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_coefficient: 0.2
+  entropy_coefficient: 0.0
+  value_coefficient: 0.5
+  max_gradient_norm: 0.5
+  update_epochs: 4
+  minibatches: 8
+  hidden_sizes:
+  - 256
+  - 256
+  initial_log_std: -3.0

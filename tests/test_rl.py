@@ -108,3 +108,18 @@ def test_success_at_reference_horizon_is_truncation_not_failure(monkeypatch) -> 
     _, _, terminated, truncated, _ = env.step(torch.zeros(2, 20))
     torch.testing.assert_close(terminated, torch.tensor([False, True]))
     torch.testing.assert_close(truncated, torch.tensor([True, False]))
+
+
+def test_per_finger_reward_penalizes_substituting_other_fingers() -> None:
+    """Equal contact counts can still represent the wrong grasp identity."""
+    from morphim_mmo.rl.reward import contact_matching_reward
+
+    reference = torch.tensor([[True, True, True, True, False]])
+    wrong = torch.tensor([[True, True, False, True, True]])
+    count_reward, _, _ = contact_matching_reward(wrong, reference, mode="count")
+    finger_reward, mismatch, _ = contact_matching_reward(wrong, reference, mode="per_finger")
+    correct_reward, _, _ = contact_matching_reward(reference, reference, mode="per_finger")
+    torch.testing.assert_close(count_reward, torch.tensor([1.0]))
+    torch.testing.assert_close(finger_reward, torch.tensor([0.6]))
+    torch.testing.assert_close(mismatch, torch.tensor([0.4]))
+    torch.testing.assert_close(correct_reward, torch.tensor([1.0]))

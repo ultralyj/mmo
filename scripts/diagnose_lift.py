@@ -54,6 +54,8 @@ def main():
         failed = torch.zeros(args.num_envs, dtype=torch.bool, device=base.device)
         max_force = torch.zeros(args.num_envs, device=base.device)
         min_clearance = torch.full_like(max_force, float("inf"))
+        hold_contact = torch.zeros((args.num_envs, 5), device=base.device)
+        hold_frames = 0
         rows = []
         with torch.no_grad():
             for step in range(reference.frame_count):
@@ -65,6 +67,9 @@ def main():
                 peak = torch.maximum(peak, base.object.pose.p[:, 2])
                 max_force = torch.maximum(max_force, info["maximum_object_contact_force"])
                 min_clearance = torch.minimum(min_clearance, info["table_clearance"])
+                if config.control.hold_steps and step >= reference.frame_count - config.control.hold_steps:
+                    hold_contact += info["observed_contact"].float()
+                    hold_frames += 1
                 row = {
                     "step": step,
                     "height": float(base.object.pose.p[:, 2].mean()),
@@ -72,6 +77,9 @@ def main():
                     "add": float(info["add_error"].mean()),
                     "fingers": float(info["observed_contact"].float().sum(-1).mean()),
                     "force": float(info["maximum_object_contact_force"].max()),
+                    "observed_contact": info["observed_contact"].float().mean(0).tolist(),
+                    "reference_contact": base._reference_contact[step].tolist(),
+                    "finger_force_n": info["finger_contact_force"].mean(0).tolist(),
                     "failed": int(failed.sum()),
                     "clearance": float(info["table_clearance"].min()),
                 }
@@ -82,6 +90,9 @@ def main():
         final_lift = base.object.pose.p[:, 2] - initial_height
         # In addition to the paper criterion, insist on sustained physical lift.
         lift_success = success & (final_lift >= 0.04)
+        hold_fraction = hold_contact / max(hold_frames, 1)
+        final_target = base._reference_contact[-1]
+        finger_match_success = lift_success & torch.where(final_target, hold_fraction >= .9, hold_fraction <= .1).all(-1)
         result = {
             "seed": args.seed, "checkpoint": args.checkpoint,
             "config": args.config, "frames": reference.frame_count,
@@ -93,12 +104,15 @@ def main():
             "max_contact_force_n": max_force.tolist(),
             "minimum_table_clearance_m": min_clearance.tolist(),
             "success": success.tolist(), "lift_success": lift_success.tolist(),
+            "finger_order": ["thumb", "index", "middle", "ring", "pinky"],
+            "hold_contact_fraction": hold_fraction.tolist(),
+            "finger_match_success": finger_match_success.tolist(),
             "rows": rows,
         }
         path = Path(args.output)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(result, indent=2))
-        print(f"Success: {int(success.sum())}/{args.num_envs}; sustained >=4cm: {int(lift_success.sum())}/{args.num_envs}")
+        print(f"Success: {int(success.sum())}/{args.num_envs}; sustained >=4cm: {int(lift_success.sum())}/{args.num_envs}; hold finger match: {int(finger_match_success.sum())}/{args.num_envs}")
     finally:
         env.close()
 
