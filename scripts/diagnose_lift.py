@@ -54,6 +54,7 @@ def main():
         failed = torch.zeros(args.num_envs, dtype=torch.bool, device=base.device)
         max_force = torch.zeros(args.num_envs, device=base.device)
         min_clearance = torch.full_like(max_force, float("inf"))
+        max_self_force = torch.zeros_like(max_force)
         hold_contact = torch.zeros((args.num_envs, 5), device=base.device)
         hold_frames = 0
         rows = []
@@ -70,6 +71,7 @@ def main():
                 if config.control.hold_steps and step >= reference.frame_count - config.control.hold_steps:
                     hold_contact += info["observed_contact"].float()
                     hold_frames += 1
+                max_self_force = torch.maximum(max_self_force, info["maximum_self_contact_force"])
                 row = {
                     "step": step,
                     "height": float(base.object.pose.p[:, 2].mean()),
@@ -81,6 +83,8 @@ def main():
                     "reference_contact": base._reference_contact[step].tolist(),
                     "finger_force_n": info["finger_contact_force"].mean(0).tolist(),
                     "failed": int(failed.sum()),
+                    "self_force_n": float(info["maximum_self_contact_force"].max()),
+                    "termination_reasons": {k:int(v.sum()) for k,v in info.items() if k.startswith("terminate_")},
                     "clearance": float(info["table_clearance"].min()),
                 }
                 rows.append(row)
@@ -102,6 +106,7 @@ def main():
             "final_height_m": base.object.pose.p[:, 2].tolist(),
             "final_add_m": info["add_error"].tolist(),
             "max_contact_force_n": max_force.tolist(),
+            "max_self_contact_force_n": max_self_force.tolist(),
             "minimum_table_clearance_m": min_clearance.tolist(),
             "success": success.tolist(), "lift_success": lift_success.tolist(),
             "finger_order": ["thumb", "index", "middle", "ring", "pinky"],

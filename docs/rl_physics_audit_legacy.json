@@ -1,0 +1,1102 @@
+{
+  "config": "configs/rl/wuji_hand2_apple_fingers.yaml",
+  "checkpoint": "outputs/rl/lift_fingers_v2/checkpoint-final.pt",
+  "backend": "gpu",
+  "drive_settings": [
+    {
+      "name": "r_thumb_cmc_flex",
+      "urdf": {
+        "lower": -1.187,
+        "upper": 1.291,
+        "effort": 0.6,
+        "velocity": 8.587
+      },
+      "asset_pd": {
+        "kp": 0.40844710645048043,
+        "kv": 0.020882010257063675
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_index_finger_mcp_flex",
+      "urdf": {
+        "lower": -1.047,
+        "upper": 1.57,
+        "effort": 2.0,
+        "velocity": 8.203
+      },
+      "asset_pd": {
+        "kp": 0.37352218155860073,
+        "kv": 0.01882274330029718
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_middle_finger_mcp_flex",
+      "urdf": {
+        "lower": -1.047,
+        "upper": 1.57,
+        "effort": 2.0,
+        "velocity": 8.203
+      },
+      "asset_pd": {
+        "kp": 0.3687093483646485,
+        "kv": 0.01848622487024593
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_ring_finger_mcp_flex",
+      "urdf": {
+        "lower": -1.047,
+        "upper": 1.57,
+        "effort": 2.0,
+        "velocity": 8.203
+      },
+      "asset_pd": {
+        "kp": 0.35718151495111794,
+        "kv": 0.018376606800780005
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_pinky_mcp_flex",
+      "urdf": {
+        "lower": -1.047,
+        "upper": 1.57,
+        "effort": 2.0,
+        "velocity": 8.203
+      },
+      "asset_pd": {
+        "kp": 0.3655325975433942,
+        "kv": 0.018616960278988272
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_thumb_cmc_abd",
+      "urdf": {
+        "lower": -1.484,
+        "upper": 0.698,
+        "effort": 0.6,
+        "velocity": 11.1
+      },
+      "asset_pd": {
+        "kp": 0.6858601063643346,
+        "kv": 0.030610939996373314
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_index_finger_mcp_abd",
+      "urdf": {
+        "lower": -0.698,
+        "upper": 0.698,
+        "effort": 0.2,
+        "velocity": 8.11
+      },
+      "asset_pd": {
+        "kp": 0.45592448909027794,
+        "kv": 0.019798167597016643
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_middle_finger_mcp_abd",
+      "urdf": {
+        "lower": -0.698,
+        "upper": 0.698,
+        "effort": 0.2,
+        "velocity": 8.11
+      },
+      "asset_pd": {
+        "kp": 0.4164253443634641,
+        "kv": 0.018032947229953678
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_ring_finger_mcp_abd",
+      "urdf": {
+        "lower": -0.698,
+        "upper": 0.698,
+        "effort": 0.2,
+        "velocity": 8.11
+      },
+      "asset_pd": {
+        "kp": 0.42977315313086895,
+        "kv": 0.01867700966212433
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_pinky_mcp_abd",
+      "urdf": {
+        "lower": -0.698,
+        "upper": 0.698,
+        "effort": 0.2,
+        "velocity": 8.11
+      },
+      "asset_pd": {
+        "kp": 0.41393113081120425,
+        "kv": 0.018732177029667153
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_thumb_mcp",
+      "urdf": {
+        "lower": -1.047,
+        "upper": 1.57,
+        "effort": 0.3,
+        "velocity": 12.86
+      },
+      "asset_pd": {
+        "kp": 0.2391112196099482,
+        "kv": 0.010181475050560962
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_index_finger_pip",
+      "urdf": {
+        "lower": -1.047,
+        "upper": 2.094,
+        "effort": 0.3,
+        "velocity": 12.86
+      },
+      "asset_pd": {
+        "kp": 0.24368366649522863,
+        "kv": 0.010477031953162727
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_middle_finger_pip",
+      "urdf": {
+        "lower": -1.047,
+        "upper": 2.094,
+        "effort": 0.3,
+        "velocity": 12.86
+      },
+      "asset_pd": {
+        "kp": 0.22218607502059182,
+        "kv": 0.009592200014076666
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_ring_finger_pip",
+      "urdf": {
+        "lower": -1.047,
+        "upper": 2.094,
+        "effort": 0.3,
+        "velocity": 12.86
+      },
+      "asset_pd": {
+        "kp": 0.24930151196247122,
+        "kv": 0.01059512121009555
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_pinky_pip",
+      "urdf": {
+        "lower": -1.047,
+        "upper": 2.094,
+        "effort": 0.3,
+        "velocity": 12.86
+      },
+      "asset_pd": {
+        "kp": 0.22729367621965954,
+        "kv": 0.00951005441616486
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_thumb_ip",
+      "urdf": {
+        "lower": -1.047,
+        "upper": 1.57,
+        "effort": 0.3,
+        "velocity": 13.5
+      },
+      "asset_pd": {
+        "kp": 0.20736128319711747,
+        "kv": 0.00909698844675045
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_index_finger_dip",
+      "urdf": {
+        "lower": -1.047,
+        "upper": 1.57,
+        "effort": 0.3,
+        "velocity": 13.5
+      },
+      "asset_pd": {
+        "kp": 0.18026971340925335,
+        "kv": 0.008240212147903584
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_middle_finger_dip",
+      "urdf": {
+        "lower": -1.047,
+        "upper": 1.57,
+        "effort": 0.3,
+        "velocity": 13.5
+      },
+      "asset_pd": {
+        "kp": 0.19427606072023446,
+        "kv": 0.009152994605972402
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_ring_finger_dip",
+      "urdf": {
+        "lower": -1.047,
+        "upper": 1.57,
+        "effort": 0.3,
+        "velocity": 13.5
+      },
+      "asset_pd": {
+        "kp": 0.2285032688178066,
+        "kv": 0.009917602877441107
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    },
+    {
+      "name": "r_pinky_dip",
+      "urdf": {
+        "lower": -1.047,
+        "upper": 1.57,
+        "effort": 0.3,
+        "velocity": 13.5
+      },
+      "asset_pd": {
+        "kp": 0.1964723550341816,
+        "kv": 0.009017295241756363
+      },
+      "stiffness": 200.0,
+      "damping": 10.0,
+      "force_limit": 5.0,
+      "max_velocity": 100.0,
+      "armature": [
+        0.0
+      ]
+    }
+  ],
+  "collision_shapes": [
+    {
+      "link": "r_wrist",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_thumb_proximal",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_index_finger_proximal",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_middle_finger_proximal",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_ring_finger_proximal",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_pinky_proximal",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_thumb_proximal_abd",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_index_finger_proximal_abd",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_middle_finger_proximal_abd",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_ring_finger_proximal_abd",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_pinky_proximal_abd",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_thumb_middle",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_index_finger_middle",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_middle_finger_middle",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_ring_finger_middle",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_pinky_middle",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_thumb_distal",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_index_finger_distal",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_middle_finger_distal",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_ring_finger_distal",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_pinky_distal",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_thumb_tip_sensor_frame",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_index_finger_tip_sensor_frame",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_middle_finger_tip_sensor_frame",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_ring_finger_tip_sensor_frame",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    },
+    {
+      "link": "r_pinky_tip_sensor_frame",
+      "type": "PhysxCollisionShapeConvexMesh",
+      "collision_groups": [
+        1,
+        1,
+        536870912,
+        0
+      ],
+      "contact_offset": 0.019999999552965164,
+      "rest_offset": 0.0,
+      "disable_gravity": true
+    }
+  ],
+  "joints": [
+    {
+      "name": "r_thumb_cmc_flex",
+      "raw_reference_final_rad": 0.9409155249595642,
+      "corrected_reference_final_rad": 1.1345505714416504,
+      "actual_final_rad": 1.1073342561721802,
+      "actual_min_rad": -0.10664395242929459,
+      "actual_max_rad": 1.1876027584075928,
+      "max_actual_speed_rad_s": 4.4049201011657715,
+      "velocity_limit_rad_s": 8.587,
+      "min_limit_margin_rad": 0.10339724159240715,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 8.333333333333334
+    },
+    {
+      "name": "r_index_finger_mcp_flex",
+      "raw_reference_final_rad": 0.22193923592567444,
+      "corrected_reference_final_rad": 0.26217785477638245,
+      "actual_final_rad": 0.22125884890556335,
+      "actual_min_rad": -0.21238134801387787,
+      "actual_max_rad": 0.25101345777511597,
+      "max_actual_speed_rad_s": 1.7775853872299194,
+      "velocity_limit_rad_s": 8.203,
+      "min_limit_margin_rad": 0.8346186519861221,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 2.5
+    },
+    {
+      "name": "r_middle_finger_mcp_flex",
+      "raw_reference_final_rad": 0.22639329731464386,
+      "corrected_reference_final_rad": -0.026673123240470886,
+      "actual_final_rad": -0.04733153432607651,
+      "actual_min_rad": -0.19715173542499542,
+      "actual_max_rad": 0.17423836886882782,
+      "max_actual_speed_rad_s": 4.140689373016357,
+      "velocity_limit_rad_s": 8.203,
+      "min_limit_margin_rad": 0.8498482645750045,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 2.5
+    },
+    {
+      "name": "r_ring_finger_mcp_flex",
+      "raw_reference_final_rad": 0.36502182483673096,
+      "corrected_reference_final_rad": 0.23919492959976196,
+      "actual_final_rad": 0.2184208780527115,
+      "actual_min_rad": -0.5470432043075562,
+      "actual_max_rad": 0.2409421056509018,
+      "max_actual_speed_rad_s": 2.616217613220215,
+      "velocity_limit_rad_s": 8.203,
+      "min_limit_margin_rad": 0.4999567956924438,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 2.5
+    },
+    {
+      "name": "r_pinky_mcp_flex",
+      "raw_reference_final_rad": 0.8262211084365845,
+      "corrected_reference_final_rad": 0.13798892498016357,
+      "actual_final_rad": 0.1419842541217804,
+      "actual_min_rad": -0.18869397044181824,
+      "actual_max_rad": 0.4361693263053894,
+      "max_actual_speed_rad_s": 11.494439125061035,
+      "velocity_limit_rad_s": 8.203,
+      "min_limit_margin_rad": 0.8583060295581817,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 3,
+      "configured_effort_to_urdf_ratio": 2.5
+    },
+    {
+      "name": "r_thumb_cmc_abd",
+      "raw_reference_final_rad": -0.5720171928405762,
+      "corrected_reference_final_rad": -0.45040059089660645,
+      "actual_final_rad": -0.499268114566803,
+      "actual_min_rad": -0.5130422711372375,
+      "actual_max_rad": 0.1185620054602623,
+      "max_actual_speed_rad_s": 1.3993008136749268,
+      "velocity_limit_rad_s": 11.1,
+      "min_limit_margin_rad": 0.5794379945397377,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 8.333333333333334
+    },
+    {
+      "name": "r_index_finger_mcp_abd",
+      "raw_reference_final_rad": 0.007053996901959181,
+      "corrected_reference_final_rad": -0.22801822423934937,
+      "actual_final_rad": -0.23457089066505432,
+      "actual_min_rad": -0.3271339535713196,
+      "actual_max_rad": 0.08828464895486832,
+      "max_actual_speed_rad_s": 3.8493025302886963,
+      "velocity_limit_rad_s": 8.11,
+      "min_limit_margin_rad": 0.3708660464286804,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 25.0
+    },
+    {
+      "name": "r_middle_finger_mcp_abd",
+      "raw_reference_final_rad": 0.16000670194625854,
+      "corrected_reference_final_rad": -0.5811001658439636,
+      "actual_final_rad": -0.5882011651992798,
+      "actual_min_rad": -0.6434383988380432,
+      "actual_max_rad": 0.2781727612018585,
+      "max_actual_speed_rad_s": 12.57589340209961,
+      "velocity_limit_rad_s": 8.11,
+      "min_limit_margin_rad": 0.05456160116195674,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 3,
+      "configured_effort_to_urdf_ratio": 25.0
+    },
+    {
+      "name": "r_ring_finger_mcp_abd",
+      "raw_reference_final_rad": 0.060392312705516815,
+      "corrected_reference_final_rad": 0.27446839213371277,
+      "actual_final_rad": 0.2778509259223938,
+      "actual_min_rad": -0.08971994370222092,
+      "actual_max_rad": 0.2778511047363281,
+      "max_actual_speed_rad_s": 3.3876376152038574,
+      "velocity_limit_rad_s": 8.11,
+      "min_limit_margin_rad": 0.42014889526367183,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 25.0
+    },
+    {
+      "name": "r_pinky_mcp_abd",
+      "raw_reference_final_rad": 0.030477968975901604,
+      "corrected_reference_final_rad": 0.07166951149702072,
+      "actual_final_rad": 0.06960289925336838,
+      "actual_min_rad": -0.03801616653800011,
+      "actual_max_rad": 0.3480185568332672,
+      "max_actual_speed_rad_s": 1.4993574619293213,
+      "velocity_limit_rad_s": 8.11,
+      "min_limit_margin_rad": 0.34998144316673274,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 25.0
+    },
+    {
+      "name": "r_thumb_mcp",
+      "raw_reference_final_rad": 0.07839030027389526,
+      "corrected_reference_final_rad": -0.25190553069114685,
+      "actual_final_rad": -0.36468321084976196,
+      "actual_min_rad": -0.3973570466041565,
+      "actual_max_rad": 0.47984811663627625,
+      "max_actual_speed_rad_s": 5.890017986297607,
+      "velocity_limit_rad_s": 12.86,
+      "min_limit_margin_rad": 0.6496429533958434,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 16.666666666666668
+    },
+    {
+      "name": "r_index_finger_pip",
+      "raw_reference_final_rad": 0.8340991735458374,
+      "corrected_reference_final_rad": 1.0879262685775757,
+      "actual_final_rad": 0.9236775040626526,
+      "actual_min_rad": 0.3545382618904114,
+      "actual_max_rad": 0.9593665599822998,
+      "max_actual_speed_rad_s": 5.18923282623291,
+      "velocity_limit_rad_s": 12.86,
+      "min_limit_margin_rad": 1.1346334400177,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 16.666666666666668
+    },
+    {
+      "name": "r_middle_finger_pip",
+      "raw_reference_final_rad": 0.980323851108551,
+      "corrected_reference_final_rad": 1.246610164642334,
+      "actual_final_rad": 1.1692373752593994,
+      "actual_min_rad": 0.20144207775592804,
+      "actual_max_rad": 1.1694395542144775,
+      "max_actual_speed_rad_s": 5.034725189208984,
+      "velocity_limit_rad_s": 12.86,
+      "min_limit_margin_rad": 0.9245604457855223,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 16.666666666666668
+    },
+    {
+      "name": "r_ring_finger_pip",
+      "raw_reference_final_rad": 0.7422077655792236,
+      "corrected_reference_final_rad": 1.3033339977264404,
+      "actual_final_rad": 1.2084236145019531,
+      "actual_min_rad": 0.8504167199134827,
+      "actual_max_rad": 1.4228200912475586,
+      "max_actual_speed_rad_s": 9.874007225036621,
+      "velocity_limit_rad_s": 12.86,
+      "min_limit_margin_rad": 0.6711799087524413,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 16.666666666666668
+    },
+    {
+      "name": "r_pinky_pip",
+      "raw_reference_final_rad": 0.3290078938007355,
+      "corrected_reference_final_rad": -0.02545642852783203,
+      "actual_final_rad": -0.025279410183429718,
+      "actual_min_rad": -0.748803436756134,
+      "actual_max_rad": 0.2588101923465729,
+      "max_actual_speed_rad_s": 4.818424224853516,
+      "velocity_limit_rad_s": 12.86,
+      "min_limit_margin_rad": 0.2981965632438659,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 16.666666666666668
+    },
+    {
+      "name": "r_thumb_ip",
+      "raw_reference_final_rad": 0.18723651766777039,
+      "corrected_reference_final_rad": 0.10604588687419891,
+      "actual_final_rad": 0.10589703917503357,
+      "actual_min_rad": -0.0658424124121666,
+      "actual_max_rad": 0.10905543714761734,
+      "max_actual_speed_rad_s": 4.626419544219971,
+      "velocity_limit_rad_s": 13.5,
+      "min_limit_margin_rad": 0.9811575875878333,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 16.666666666666668
+    },
+    {
+      "name": "r_index_finger_dip",
+      "raw_reference_final_rad": 0.3216001093387604,
+      "corrected_reference_final_rad": 0.8614962100982666,
+      "actual_final_rad": 0.861085832118988,
+      "actual_min_rad": 0.26537784934043884,
+      "actual_max_rad": 0.8611594438552856,
+      "max_actual_speed_rad_s": 9.055102348327637,
+      "velocity_limit_rad_s": 13.5,
+      "min_limit_margin_rad": 0.7088405561447144,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 16.666666666666668
+    },
+    {
+      "name": "r_middle_finger_dip",
+      "raw_reference_final_rad": 0.11346963793039322,
+      "corrected_reference_final_rad": 0.7869356274604797,
+      "actual_final_rad": 0.7841022610664368,
+      "actual_min_rad": -0.11859875172376633,
+      "actual_max_rad": 0.7853038907051086,
+      "max_actual_speed_rad_s": 11.29210090637207,
+      "velocity_limit_rad_s": 13.5,
+      "min_limit_margin_rad": 0.7846961092948914,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 16.666666666666668
+    },
+    {
+      "name": "r_ring_finger_dip",
+      "raw_reference_final_rad": 0.0615362823009491,
+      "corrected_reference_final_rad": 0.20009753108024597,
+      "actual_final_rad": 0.19766169786453247,
+      "actual_min_rad": -0.2646488547325134,
+      "actual_max_rad": 0.19766172766685486,
+      "max_actual_speed_rad_s": 4.816016674041748,
+      "velocity_limit_rad_s": 13.5,
+      "min_limit_margin_rad": 0.7823511452674865,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 16.666666666666668
+    },
+    {
+      "name": "r_pinky_dip",
+      "raw_reference_final_rad": -0.09252051264047623,
+      "corrected_reference_final_rad": -0.28868526220321655,
+      "actual_final_rad": -0.29259002208709717,
+      "actual_min_rad": -0.31974440813064575,
+      "actual_max_rad": 0.769508957862854,
+      "max_actual_speed_rad_s": 4.402658939361572,
+      "velocity_limit_rad_s": 13.5,
+      "min_limit_margin_rad": 0.7272555918693542,
+      "command_limit_violation_rad": 0.0,
+      "speed_exceed_substeps": 0,
+      "configured_effort_to_urdf_ratio": 16.666666666666668
+    }
+  ],
+  "worst_self_penetration_m": 0.005028661012002149,
+  "nonexcluded_self_overlaps": [
+    [
+      "r_index_finger_middle / r_middle_finger_distal",
+      0.005028661012002149
+    ],
+    [
+      "r_index_finger_distal / r_middle_finger_distal",
+      0.003989224669092004
+    ],
+    [
+      "r_index_finger_middle / r_middle_finger_tip_sensor_frame",
+      0.00296775961392369
+    ],
+    [
+      "r_pinky_middle / r_ring_finger_middle",
+      0.0028464660232737997
+    ],
+    [
+      "r_index_finger_middle / r_middle_finger_middle",
+      0.002752200845943422
+    ],
+    [
+      "r_index_finger_distal / r_middle_finger_tip_sensor_frame",
+      0.0024648443131283907
+    ],
+    [
+      "r_index_finger_proximal_abd / r_middle_finger_distal",
+      0.0022529335411549897
+    ],
+    [
+      "r_thumb_middle / r_thumb_tip_sensor_frame",
+      0.0016106337386249281
+    ],
+    [
+      "r_pinky_middle / r_ring_finger_proximal_abd",
+      0.0004713179291541485
+    ],
+    [
+      "r_pinky_middle / r_pinky_tip_sensor_frame",
+      0.000404831925603354
+    ],
+    [
+      "r_ring_finger_middle / r_ring_finger_tip_sensor_frame",
+      0.00039758687113350025
+    ],
+    [
+      "r_index_finger_middle / r_index_finger_tip_sensor_frame",
+      0.0003905640647094409
+    ],
+    [
+      "r_middle_finger_middle / r_middle_finger_tip_sensor_frame",
+      0.00039032927075759226
+    ],
+    [
+      "r_index_finger_proximal_abd / r_middle_finger_middle",
+      0.0002428023219124582
+    ]
+  ],
+  "success": true,
+  "final_lift_m": 0.05003182590007782,
+  "finger_force_n": [
+    7.2960405349731445,
+    9.909184455871582,
+    5.538163185119629,
+    15.125679016113281,
+    0.0
+  ],
+  "notes": [
+    "PD demand is an explicit-law estimate, not a measured motor torque.",
+    "FCL checks convex hulls of URDF collision meshes, excluding only adjacency and vendor MJCF exclusions.",
+    "The asset models 26 rigid links, not internal gears, tendons or gear backlash."
+  ]
+}

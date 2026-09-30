@@ -29,6 +29,7 @@ class TerminationConfig:
     contact_mismatch_ema_threshold: float
     maximum_contact_force_n: float
     table_collision_force_n: float
+    self_collision_force_n: float = float("inf")
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,14 @@ class ControlConfig:
     wrist_bias_m: tuple[float, ...] = (0.0, 0.0, 0.0)
     reference_end_step: int | None = None
     hold_steps: int = 0
+    actuator_profile: str = "legacy"
+    asset_gain_scale: float = 1.0
+    self_collisions: bool = False
+    rate_limit_targets: bool = False
+    grasp_ramp_steps: int = 0
+    inactive_finger_residual_limit_rad: float | None = None
+    grasp_bias_by_joint: dict[str, float] | None = None
+    inactive_reference_by_joint: dict[str, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -60,6 +69,9 @@ class PhysicsConfig:
     object_friction: float
     hand_friction: float
     table_friction: float
+    contact_offset_m: float = 0.02
+    solver_position_iterations: int = 15
+    solver_velocity_iterations: int = 1
 
 
 @dataclass(frozen=True)

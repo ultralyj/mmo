@@ -111,3 +111,42 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m morphim_mmo.cli.rl.
   --checkpoint outputs/rl/lift_fingers_robust_dr_v3/checkpoint-final.pt --seed 999 \
   --output outputs/rl/diagnostics/lift_four_fingers_dr_success.gif
 ```
+
+## 2026-09-30：关节驱动、自碰撞与小指姿态审计
+
+用户质疑小指翘起与仿真合理性。此前的抓取验收没有验证这些约束；本次审计发现旧成功轨迹不满足完整物理合理性要求，不能用于宣称硬件可执行。
+
+### 旧设置的实际问题
+
+- 逐物理子步读取 qpos/qvel：小指 MCP flex 峰值 11.49rad/s，超过 URDF 8.203rad/s；中指 MCP abd 峰值 12.58rad/s，超过 8.11rad/s。位置指令虽被限位夹紧，但并未设置引擎速度上限。
+- 全关节 force_limit=5Nm；对 0.2Nm 外展轴为 25 倍，对 0.3Nm 指间轴为 16.67 倍，对 2Nm MCP flex 为 2.5 倍。
+- 统一 Kp=200、Kd=10；资产 MJCF 的逐关节 Kp 约 0.18–0.69、Kd 约 0.008–0.031。旧参数并非厂家模型的驱动设置。
+- 全手 collision ignore 共用同一位，自碰撞全部关闭。FCL 对 URDF 凸碰撞网格逐子步检测，非相邻食指/中指最大穿透约 5.03mm，部分小指/无名指也有穿透。
+- 手部重力由 ManiSkill 的默认 passive-force balancing 自动关闭。未使用厂家 MJCF 的关节 armature。
+- contact_offset 默认 20mm，远大于本任务的毫米级几何尺度；不能把接触力阈值与精确几何接触简单等同。
+- 实际 SAPIEN joint order 与按手指分组的 URDF/reference order不同。旧偏置由搜索以运行时顺序得到，未按名称记录；本次新增 `grasp_bias_by_joint`，明确名称与值。小指 MCP flex 原始参考 0.826rad 被偏置减至 0.138rad，故明显伸展/翘起；这不是抓取所必需。
+
+### 修复路径
+
+- 新 `actuator_profile: asset` 读取固定版本 URDF effort/velocity，以及厂家 MJCF 的 Kp/Kd/armature；逐关节配置驱动，力矩上限不超过 URDF，恢复手部重力。域随机化对资产基准增益缩放，不再意外重设回旧统一 200/10/5。
+- 开启非相邻刚体自碰撞。固定焊接的 distal/tip/sensor frame 按同一物理刚体处理，忽略真实相邻刚体与 MJCF 明确排除的腕部装配对；保留同指非相邻及跨指检测。通过 clique 位掩码覆盖排除图，每个环境均独立设置与校验，避免全手共享禁碰位。
+- 使用硬件速度上限限制每控制步目标变化，并在每物理子步插值。发现 ManiSkill 原插值仅写 GPU buffer、BaseEnv 却在插值之前上传一次；新增控制器每子步主动上传插值目标。
+- 接触裕量改为 1mm，480Hz 物理步进；30 次位置、4 次速度约束迭代。腕抓取校正渐变 15 步，不再一步跳变。
+- 小指预偏置归零，跟踪原始 MMO 姿态；非接触小指策略残差限制为±0.05rad，停止用无约束搜索把它推向极端姿态。
+- 新物理配置 `configs/rl/wuji_hand2_apple_physical.yaml`，旧检查点/配置保留用于审计对照。
+- 新增非相邻自接触力指标与安全终止。重新调参必须在这些物理约束保持启用的条件下进行。
+
+### 审计范围与证据
+
+- 旧完整逐子步结果：`outputs/rl/diagnostics/physics_audit_legacy.json`；Git 保存摘要 `docs/rl_physics_audit_legacy.json`。
+- 工具 `scripts/audit_hand_physics.py` 检查角度、实际速度、目标角度、逐轴驱动配置、重力、碰撞掩码、FCL 凸网格穿透；PD demand 明确标记为显式公式估计，不冒充 PhysX 实际隐式驱动力矩测量。
+- URDF 31 个 link frame 中只有 26 个带碰撞几何。齿轮、腱绳、间隙、柔性内部组件没有建模，不能宣称它们的内部碰撞已被仿真验证。
+- 官方参考：[ManiSkill 自定义机器人说明](https://maniskill.readthedocs.io/en/latest/user_guide/tutorials/custom_robots.html)建议用具体排除对替代禁用全部自碰撞；[SAPIEN PD 驱动说明](https://sapien.ucsd.edu/docs/2.2/tutorial/robotics/pid.html)说明驱动刚度、阻尼与上限的含义。厂家参数的直接来源是本地 pinned `assets/wuji-description/hand2/hand2_beta2/body/{urdf/right.urdf,mjcf/right.xml}`。
+
+### 物理修复后的参数与验证补充
+
+- 仅使用厂家 1x PD 的初始恢复配置不能直接复用旧预偏置完成抓取；不回退自碰撞、重力或 effort/velocity 上限。
+- 新调参配置 `wuji_hand2_apple_physical_tuned.yaml` 以厂家逐关节 PD 为基准，软件增益缩放 4x，仍严格保留各轴 URDF 力矩/速度上限与厂家 armature。这属于控制器调参，不是声称厂家实际伺服器恰好使用 4x 参数。
+- 小指原始 MMO 初始/过程姿态也可能与邻指相冲突，改为固定、温和弯曲的休息目标：MCP flex=0.4rad、abd=0.05rad、PIP=0.4rad、DIP=0.2rad；策略允许±0.05rad修正。小指不再被自由 CEM 搜索，且自碰撞保持启用。
+- GPU 实机加载检查：全部 4 个独立场景验证每关节 effort/velocity/armature、手部重力、逐对碰撞过滤以及小指动作边界；全部通过。
+- 安全搜索拒绝曾经触发过失败的轨迹，即便后续还能抬升也不当作成功。新增逐根指尖到对象网格的连续距离评分，减少稀疏接触搜索中的无效候选。

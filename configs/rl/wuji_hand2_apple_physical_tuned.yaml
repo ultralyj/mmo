@@ -1,0 +1,118 @@
+# Hardware torque/velocity caps and vendor armature; software PD gains scaled 4x.
+# Pinky uses a relaxed flexed posture, not a freely optimized extension.
+reward:
+  add_alpha: 50.0
+  final_add_success_m: 0.05
+  contact_force_threshold_n: 0.01
+  contact_mode: per_finger
+  require_reference_contact: true
+termination:
+  ema_decay: 0.95
+  add_ema_threshold_m: 0.08
+  contact_mismatch_ema_threshold: 0.8
+  maximum_contact_force_n: 100.0
+  table_collision_force_n: 1.0
+  self_collision_force_n: 5.0
+control:
+  simulation_frequency_hz: 480
+  control_frequency_hz: 30
+  reference_stride: 4
+  future_steps: 4
+  residual_limit_rad: 0.25
+  stiffness: 200.0
+  damping: 10.0
+  force_limit: 2.0
+  grasp_bias_rad:
+  - 0.19363504
+  - 0.04023861
+  - -0.25306642
+  - -0.12582689
+  - -0.68823216
+  - 0.12161661
+  - -0.23507223
+  - -0.74110686
+  - 0.21407608
+  - 0.04119154
+  - -0.33029584
+  - 0.25382708
+  - 0.26628632
+  - 0.56112623
+  - -0.35446432
+  - -0.08119063
+  - 0.53989611
+  - 0.67346595
+  - 0.13856125
+  - -0.19616475
+  grasp_contact_lookahead_steps: 20
+  grasp_min_contact_fingers: 3
+  grasp_release_decay: 0.9
+  wrist_bias_m:
+  - 0.015957055613398552
+  - -0.002423759549856186
+  - -0.015524876187555492
+  reference_end_step: 77
+  hold_steps: 30
+  grasp_bias_by_joint:
+    r_thumb_cmc_flex: 0.19363504
+    r_index_finger_mcp_flex: 0.04023861
+    r_middle_finger_mcp_flex: -0.25306642
+    r_ring_finger_mcp_flex: -0.12582689
+    r_pinky_mcp_flex: 0.0
+    r_thumb_cmc_abd: 0.12161661
+    r_index_finger_mcp_abd: -0.23507223
+    r_middle_finger_mcp_abd: -0.74110686
+    r_ring_finger_mcp_abd: 0.21407608
+    r_pinky_mcp_abd: 0.0
+    r_thumb_mcp: -0.33029584
+    r_index_finger_pip: 0.25382708
+    r_middle_finger_pip: 0.26628632
+    r_ring_finger_pip: 0.56112623
+    r_pinky_pip: 0.0
+    r_thumb_ip: -0.08119063
+    r_index_finger_dip: 0.53989611
+    r_middle_finger_dip: 0.67346595
+    r_ring_finger_dip: 0.13856125
+    r_pinky_dip: 0.0
+  actuator_profile: asset
+  asset_gain_scale: 4.0
+  self_collisions: true
+  rate_limit_targets: true
+  grasp_ramp_steps: 15
+  inactive_finger_residual_limit_rad: 0.05
+  inactive_reference_by_joint:
+    r_pinky_mcp_flex: 0.4
+    r_pinky_mcp_abd: 0.05
+    r_pinky_pip: 0.4
+    r_pinky_dip: 0.2
+physics:
+  object_mass_kg: 0.15
+  object_friction: 0.8
+  hand_friction: 1.0
+  table_friction: 0.8
+  contact_offset_m: 0.001
+  solver_position_iterations: 30
+  solver_velocity_iterations: 4
+randomization:
+  enabled: false
+  object_position_range_m: 0.05
+  object_yaw_range_rad: 0.2617993878
+  random_start: false
+  external_force_range_n: 0.0
+ppo:
+  seed: 1
+  num_envs: 256
+  rollout_steps: 128
+  total_timesteps: 1048576
+  learning_rate: 0.0001
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_coefficient: 0.2
+  entropy_coefficient: 0.0
+  value_coefficient: 0.5
+  max_gradient_norm: 0.5
+  update_epochs: 4
+  minibatches: 8
+  hidden_sizes:
+  - 256
+  - 256
+  initial_log_std: -3.0

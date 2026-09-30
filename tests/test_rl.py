@@ -123,3 +123,49 @@ def test_per_finger_reward_penalizes_substituting_other_fingers() -> None:
     torch.testing.assert_close(finger_reward, torch.tensor([0.6]))
     torch.testing.assert_close(mismatch, torch.tensor([0.4]))
     torch.testing.assert_close(correct_reward, torch.tensor([1.0]))
+
+
+def test_hardware_limits_and_fixed_body_collision_exclusions() -> None:
+    from itertools import combinations
+    from morphim_mmo.rl.agent import WujiHand2Agent
+    from morphim_mmo.rl.hardware import load_hand_hardware, collision_ignore_masks
+
+    hardware, excluded = load_hand_hardware(WujiHand2Agent.urdf_path)
+    assert hardware['r_pinky_mcp_abd'].effort_nm == 0.2
+    assert hardware['r_pinky_mcp_flex'].velocity_rad_s == 8.203
+    assert hardware['r_pinky_mcp_flex'].armature_kg_m2 == 0.0005
+    assert frozenset(['r_pinky_middle', 'r_pinky_tip_sensor_frame']) in excluded
+    assert frozenset(['r_pinky_middle', 'r_ring_finger_middle']) not in excluded
+    names = sorted(set().union(*excluded))
+    masks = collision_ignore_masks(names, excluded)
+    for left, right in combinations(names, 2):
+        assert bool(masks[left] & masks[right]) == (frozenset([left, right]) in excluded)
+
+
+def test_rate_limited_interpolation_uploads_every_gpu_substep() -> None:
+    from types import SimpleNamespace
+    from morphim_mmo.rl.controller import HardwarePDJointPosController
+
+    controller = HardwarePDJointPosController.__new__(HardwarePDJointPosController)
+    controller._target_qpos = torch.zeros(1, 2)
+    controller._velocity_bounds = torch.tensor([0.1, 0.2])
+    controller._sim_steps = 4
+    controller.config = SimpleNamespace(interpolate=True)
+    controller._preprocess_action = lambda action: action
+    uploads = []; targets = []
+    controller.scene = SimpleNamespace(gpu_sim_enabled=True, px=SimpleNamespace(
+        gpu_apply_articulation_target_position=lambda: uploads.append(True)))
+    controller.set_drive_targets = lambda target: targets.append(target.clone())
+    controller.set_action(torch.tensor([[1.0, -1.0]]))
+    for _ in range(4):
+        controller.before_simulation_step()
+    assert len(uploads) == 4
+    torch.testing.assert_close(targets[-1], torch.tensor([[0.1, -0.2]]))
+    increments = torch.diff(torch.cat([torch.zeros(1, 2), torch.cat(targets)], dim=0), dim=0)
+    assert torch.all(increments.abs() <= torch.tensor([0.025, 0.05]) + 1e-7)
+
+
+def test_grasp_gate_ramps_without_pose_jump() -> None:
+    contacts = torch.ones((10, 5), dtype=torch.bool)
+    gate = _grasp_bias_activation(contacts, 0, 3, 0.9, ramp_steps=5)
+    torch.testing.assert_close(gate[:5], torch.tensor([.2, .4, .6, .8, 1.0]))

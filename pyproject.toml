@@ -41,7 +41,10 @@ morphim-render-robot-pose = "morphim_mmo.cli.rendering.render_robot_pose:main"
 morphim-train-residual-rl = "morphim_mmo.cli.rl.train:main"
 
 [dependency-groups]
-dev = ["pytest>=8.3"]
+dev = [
+    "pytest>=8.3",
+    "python-fcl>=0.7.0.11",
+]
 
 [[tool.uv.index]]
 name = "pytorch-cu128"

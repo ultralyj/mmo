@@ -21,6 +21,7 @@ _TERMINATION_REASON_KEYS = (
     "terminate_table_height",
     "terminate_table_force",
     "terminate_contact_force",
+    "terminate_self_collision",
 )
 
 

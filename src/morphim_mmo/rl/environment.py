@@ -18,7 +18,7 @@ from mani_skill.envs.sapien_env import BaseEnv
 from mani_skill.sensors.camera import CameraConfig
 from mani_skill.utils import sapien_utils
 from mani_skill.utils.structs.pose import Pose
-from mani_skill.utils.structs.types import SimConfig
+from mani_skill.utils.structs.types import SimConfig, SceneConfig
 
 from .agent import WujiHand2Agent
 from .config import ResidualRLConfig
@@ -71,6 +71,7 @@ def _grasp_bias_activation(
     lookahead_steps: int,
     minimum_fingers: int,
     release_decay: float,
+    ramp_steps: int = 0,
 ) -> torch.Tensor:
     """Build a smooth pre-contact gate for a robot-specific grasp correction."""
 
@@ -88,6 +89,13 @@ def _grasp_bias_activation(
         )
     for frame in range(1, len(gate)):
         gate[frame] = torch.maximum(gate[frame], gate[frame - 1] * release_decay)
+    if ramp_steps < 0:
+        raise ValueError("grasp ramp steps must be nonnegative")
+    if ramp_steps:
+        previous = torch.zeros((), device=gate.device)
+        for frame in range(len(gate)):
+            gate[frame] = torch.clamp(gate[frame], previous - 1 / ramp_steps, previous + 1 / ramp_steps)
+            previous = gate[frame].clone()
     return gate
 
 
@@ -161,6 +169,11 @@ class MorphometricResidualEnv(BaseEnv):
             sim_config=SimConfig(
                 sim_freq=config.control.simulation_frequency_hz,
                 control_freq=config.control.control_frequency_hz,
+                scene_config=SceneConfig(
+                    contact_offset=config.physics.contact_offset_m,
+                    solver_position_iterations=config.physics.solver_position_iterations,
+                    solver_velocity_iterations=config.physics.solver_velocity_iterations,
+                ),
             ),
             sim_backend=sim_backend,
             enhanced_determinism=True,
@@ -181,9 +194,17 @@ class MorphometricResidualEnv(BaseEnv):
             damping=self.config.control.damping,
             force_limit=self.config.control.force_limit,
             friction=self.config.physics.hand_friction,
+            actuator_profile=self.config.control.actuator_profile,
+            asset_gain_scale=self.config.control.asset_gain_scale,
+            self_collisions=self.config.control.self_collisions,
+            rate_limit_targets=self.config.control.rate_limit_targets,
         )
 
     def _load_scene(self, options: dict) -> None:
+        if self.config.control.actuator_profile == "asset":
+            for articulation in self.agent.robot._objs:
+                articulation.solver_position_iterations = self.config.physics.solver_position_iterations
+                articulation.solver_velocity_iterations = self.config.physics.solver_velocity_iterations
         joint_names = tuple(joint.name for joint in self.agent.robot.active_joints)
         if set(joint_names) != set(self.reference.joint_names):
             raise ValueError(
@@ -214,8 +235,13 @@ class MorphometricResidualEnv(BaseEnv):
         self._reference_contact = torch.as_tensor(
             self.reference.reference_contact, dtype=torch.bool, device=device
         )
+        bias_values = self.config.control.grasp_bias_rad
+        if self.config.control.grasp_bias_by_joint is not None:
+            if set(self.config.control.grasp_bias_by_joint) != set(joint_names):
+                raise ValueError("grasp_bias_by_joint must name every active joint exactly once")
+            bias_values = [self.config.control.grasp_bias_by_joint[n] for n in joint_names]
         grasp_bias = torch.as_tensor(
-            self.config.control.grasp_bias_rad,
+            bias_values,
             dtype=torch.float32,
             device=device,
         )
@@ -228,8 +254,13 @@ class MorphometricResidualEnv(BaseEnv):
             self.config.control.grasp_contact_lookahead_steps,
             self.config.control.grasp_min_contact_fingers,
             self.config.control.grasp_release_decay,
+            self.config.control.grasp_ramp_steps,
         )
         self._reference_qpos += grasp_gate[:, None] * grasp_bias[None, :]
+        for name, angle in (self.config.control.inactive_reference_by_joint or {}).items():
+            if name not in joint_names:
+                raise ValueError(f"unknown inactive reference joint: {name}")
+            self._reference_qpos[:, joint_names.index(name)] = angle
         wrist_bias = torch.as_tensor(self.config.control.wrist_bias_m, device=device)
         if wrist_bias.shape != (3,):
             raise ValueError("wrist_bias_m must have three entries")
@@ -391,6 +422,15 @@ class MorphometricResidualEnv(BaseEnv):
         )
         self.table = table_builder.build_static("table")
         self._randomize_scene_physics()
+        self._self_pairs = []
+        if self.config.control.self_collisions:
+            for left_index, left in enumerate(self._robot_links):
+                for right in self._robot_links[left_index + 1:]:
+                    if left._bodies[0].collision_shapes and right._bodies[0].collision_shapes and frozenset([left.name, right.name]) not in self.agent.excluded_collision_pairs:
+                        self._self_pairs.append((left, right))
+        if self.scene.gpu_sim_enabled and self._self_pairs:
+            pairs = [pair for left, right in self._self_pairs for pair in zip(left._bodies, right._bodies)]
+            self._self_contact_query = self.scene.px.gpu_create_contact_pair_impulse_query(pairs)
         if self.scene.gpu_sim_enabled:
             object_pairs = []
             table_pairs = []
@@ -449,10 +489,10 @@ class MorphometricResidualEnv(BaseEnv):
             for link in articulation.links:
                 for shape in link.collision_shapes:
                     shape.physical_material = hand_material
-            for joint in articulation.active_joints:
-                joint.set_drive_properties(self.config.control.stiffness * gain_scale,
-                                           self.config.control.damping * gain_scale,
-                                           force_limit=self.config.control.force_limit)
+            for joint_index, joint in enumerate(articulation.active_joints):
+                joint.set_drive_properties(self.agent._drive_stiffness[joint_index] * gain_scale,
+                                           self.agent._drive_damping[joint_index] * gain_scale,
+                                           force_limit=self.agent._drive_limits[joint_index])
 
     def _transformed_pose(
         self,
@@ -600,6 +640,15 @@ class MorphometricResidualEnv(BaseEnv):
             self._contact_state()
         )
         reference_contact = self._reference_contact[step]
+        self_force = torch.zeros(self.num_envs, device=self.device)
+        if self._self_pairs:
+            if self.scene.gpu_sim_enabled:
+                self.scene.px.gpu_query_contact_pair_impulses(self._self_contact_query)
+                forces = self._self_contact_query.cuda_impulses.torch().reshape(len(self._self_pairs), self.num_envs, 3) / self.scene.px.timestep
+                self_force = torch.linalg.vector_norm(forces, dim=-1).amax(dim=0)
+            else:
+                for left, right in self._self_pairs:
+                    self_force = torch.maximum(self_force, torch.linalg.vector_norm(self.scene.get_pairwise_contact_forces(left, right), dim=-1))
         reward = morphometric_reward(
             add_error,
             observed_contact,
@@ -615,6 +664,7 @@ class MorphometricResidualEnv(BaseEnv):
             "reference_object_height": reference_pose[:, 2],
             "observed_contact": observed_contact,
             "reference_contact": reference_contact,
+            "maximum_self_contact_force": self_force,
             "finger_contact_force": self._finger_contact_force.clone(),
             "maximum_object_contact_force": maximum_object_force,
             "table_contact_force": table_force,
@@ -791,6 +841,8 @@ class MorphometricResidualEnv(BaseEnv):
             metrics["table_contact_force"],
             self.config.termination,
         )
+        reasons["terminate_self_collision"] = metrics["maximum_self_contact_force"] > self.config.termination.self_collision_force_n
+        reasons["fail"] |= reasons["terminate_self_collision"]
         success = (
             (self._active_step >= self.reference.frame_count - 1)
             & ~reasons["fail"]
@@ -882,9 +934,19 @@ class ResidualActionWrapper(gym.Wrapper):
         super().__init__(env)
         self.env = env
         residual_limit = env.config.control.residual_limit_rad
+        limits = np.full(env.action_space.shape, residual_limit, dtype=np.float32)
+        inactive_limit = env.config.control.inactive_finger_residual_limit_rad
+        if inactive_limit is not None:
+            active_fingers = env._reference_contact.any(dim=0).cpu().numpy()
+            prefixes = ["r_thumb", "r_index_finger", "r_middle_finger", "r_ring_finger", "r_pinky"]
+            for joint_index, joint in enumerate(env.agent.robot.active_joints):
+                for finger_index, prefix in enumerate(prefixes):
+                    if joint.name.startswith(prefix) and not active_fingers[finger_index]:
+                        limits[..., joint_index] = inactive_limit
+        self._residual_limits = torch.as_tensor(limits.reshape(-1, limits.shape[-1])[0], device=env.device)
         self.action_space = gym.spaces.Box(
-            low=-residual_limit,
-            high=residual_limit,
+            low=-limits,
+            high=limits,
             shape=env.action_space.shape,
             dtype=np.float32,
         )
@@ -898,8 +960,8 @@ class ResidualActionWrapper(gym.Wrapper):
             residual = residual.unsqueeze(0)
         residual = torch.clamp(
             residual,
-            -base_env.config.control.residual_limit_rad,
-            base_env.config.control.residual_limit_rad,
+            -self._residual_limits,
+            self._residual_limits,
         )
         q_command = base_env.current_reference_qpos + residual
         q_command = torch.clamp(
