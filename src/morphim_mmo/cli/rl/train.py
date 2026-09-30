@@ -16,7 +16,7 @@ from ...rl.visualization import render_policy_gif
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--config", type=Path, default=Path("configs/rl/wuji_hand2_apple.yaml")
+        "--config", type=Path, default=Path("configs/rl/wuji_hand2_apple_fingers.yaml")
     )
     parser.add_argument(
         "--robot-pose",
@@ -44,7 +44,7 @@ def main() -> None:
         ),
     )
     parser.add_argument(
-        "--output-dir", type=Path, default=Path("outputs/rl/wuji_hand2_apple")
+        "--output-dir", type=Path, default=Path("outputs/rl/wuji_hand2_apple_fingers")
     )
     parser.add_argument("--num-envs", type=int)
     parser.add_argument("--rollout-steps", type=int)

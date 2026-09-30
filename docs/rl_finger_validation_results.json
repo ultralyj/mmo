@@ -25,5 +25,89 @@
       0.0
     ],
     "checkpoint_sha256": "481bd687ae4d50b6de7d172c29cd5ca41cd7f926122049d8892224747261ede8"
+  },
+  "dr_v2": {
+    "seed": 303,
+    "episodes": 256,
+    "checkpoint": "outputs/rl/lift_fingers_dr_v2/checkpoint-final.pt",
+    "config": "configs/rl/wuji_hand2_apple_fingers_dr.yaml",
+    "success_rate": 1.0,
+    "strict_hold_finger_success_rate": 1.0,
+    "peak_lift_mean_m": 0.06625016857287847,
+    "final_lift_min_m": 0.049889981746673584,
+    "final_add_mean_m": 0.0063911846173141384,
+    "maximum_contact_force_n": 24.892263412475586,
+    "minimum_table_clearance_m": 0.009730994701385498,
+    "finger_order": [
+      "thumb",
+      "index",
+      "middle",
+      "ring",
+      "pinky"
+    ],
+    "hold_contact_fraction_mean": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      0.0
+    ],
+    "checkpoint_sha256": "1e00b5a5fb10e2a3014da43170175aecfcc505f840969d164eb3633b5137cadf"
+  },
+  "robust_dr_seed_707": {
+    "seed": 707,
+    "episodes": 256,
+    "checkpoint": "outputs/rl/lift_fingers_robust_dr_v3/checkpoint-final.pt",
+    "config": "configs/rl/wuji_hand2_apple_fingers_robust_dr.yaml",
+    "success_rate": 1.0,
+    "strict_hold_finger_success_rate": 1.0,
+    "peak_lift_mean_m": 0.06660340598318726,
+    "final_lift_min_m": 0.05071818828582764,
+    "final_add_mean_m": 0.004127672084905498,
+    "maximum_contact_force_n": 30.660717010498047,
+    "minimum_table_clearance_m": 0.009770121425390244,
+    "finger_order": [
+      "thumb",
+      "index",
+      "middle",
+      "ring",
+      "pinky"
+    ],
+    "hold_contact_fraction_mean": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      0.0
+    ],
+    "checkpoint_sha256": "19a8703f8a2e5356e11a0d30ecd03d3b84836d7bc290a082ef9d67abd24368d8"
+  },
+  "robust_dr_seed_999": {
+    "seed": 999,
+    "episodes": 256,
+    "checkpoint": "outputs/rl/lift_fingers_robust_dr_v3/checkpoint-final.pt",
+    "config": "configs/rl/wuji_hand2_apple_fingers_robust_dr.yaml",
+    "success_rate": 1.0,
+    "strict_hold_finger_success_rate": 1.0,
+    "peak_lift_mean_m": 0.0666215805686079,
+    "final_lift_min_m": 0.05071044713258743,
+    "final_add_mean_m": 0.004098817126759968,
+    "maximum_contact_force_n": 32.09965896606445,
+    "minimum_table_clearance_m": 0.009768810123205185,
+    "finger_order": [
+      "thumb",
+      "index",
+      "middle",
+      "ring",
+      "pinky"
+    ],
+    "hold_contact_fraction_mean": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      0.0
+    ],
+    "checkpoint_sha256": "19a8703f8a2e5356e11a0d30ecd03d3b84836d7bc290a082ef9d67abd24368d8"
   }
 }

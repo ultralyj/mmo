@@ -191,3 +191,31 @@ The paper does not publish its heat-diffusion or IK residual weights. Values in
 The Wuji asset contains a hand but no arm, so pose recovery treats the wrist as
 a floating base; this is the direct hand-only analogue of the paper's arm-hand
 IK stage.
+
+
+## Four-finger apple lift and hold
+
+The default RL command now uses explicit finger identity matching, so the
+reference thumb, index, middle and ring fingers must contact the apple.
+This is a local extension of the paper's finger-count reward; use
+`configs/rl/wuji_hand2_apple.yaml` explicitly for the original count mode.
+
+```bash
+.venv/bin/python -m morphim_mmo.cli.rl.train \
+  --config configs/rl/wuji_hand2_apple_fingers.yaml \
+  --output-dir outputs/rl/new_four_finger_run --gif-interval 0
+.venv/bin/python scripts/diagnose_lift.py \
+  --config configs/rl/wuji_hand2_apple_fingers_robust_dr.yaml \
+  --checkpoint outputs/rl/lift_fingers_robust_dr_v3/checkpoint-final.pt \
+  --num-envs 256 --seed 999 --output outputs/rl/diagnostics/new_four_finger_eval.json
+.venv/bin/python scripts/render_lift.py \
+  --config configs/rl/wuji_hand2_apple_fingers_robust_dr.yaml \
+  --checkpoint outputs/rl/lift_fingers_robust_dr_v3/checkpoint-final.pt \
+  --seed 999 --output outputs/rl/diagnostics/new_four_finger_success.gif
+```
+
+Local close-up GIFs are `outputs/rl/diagnostics/lift_four_fingers_success.gif`
+and `outputs/rl/diagnostics/lift_four_fingers_dr_success.gif`. Evaluation checks
+at least 4 cm lift after a 1-second hold and at least 90% contact coverage for
+each reference finger during the hold. See
+[the validation summary](docs/rl_finger_validation_results.json).

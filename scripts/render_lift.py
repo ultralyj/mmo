@@ -16,7 +16,7 @@ from morphim_mmo.rl.visualization import _rgb_image, _annotate_frame
 from morphim_mmo.utils.io import save_gif
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--config', default='configs/rl/wuji_hand2_apple.yaml')
+parser.add_argument('--config', default='configs/rl/wuji_hand2_apple_fingers.yaml')
 parser.add_argument('--checkpoint', required=True)
 parser.add_argument('--output', required=True)
 parser.add_argument('--seed', type=int, default=101)

@@ -88,3 +88,26 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m morphim_mmo.cli.rl.
 - 鲁棒 CEM 每组 8 个不同随机物理环境使用同一候选修正，共 64 组/512 环境；以组内平均和最差评分各 50% 合成目标，35 轮搜索。这样避免单个候选偶然匹配某个质量或摩擦样本。
 - 新配置 `wuji_hand2_apple_fingers_robust_dr.yaml`。其零残差独立 seed=707、256 回合已全部通过抬升与严格四指保持判据。
 - 进一步从四指 DR v2 的第 20 轮检查点训练鲁棒 DR v3 1,048,576 步；保留此前全部检查点、配置与指标，独立输出目录 `outputs/rl/lift_fingers_robust_dr_v3`。
+
+### 最终四指闭环验收
+
+- 四指 DR v2 的独立 seed=303 验收也达到 256/256 严格通过，作为保留的中间模型。
+- 最终鲁棒 DR v3：seed=707 与 seed=999，每组 256 回合，合计 **512/512** 同时满足完整抬升与保持、安全、ADD≤5cm、保持后抬升≥4cm、参考四指各≥90% 帧接触且小指≤10% 帧接触。机器可读结果与检查点 SHA256 已加入 `docs/rl_finger_validation_results.json`。
+- 新 GIF `outputs/rl/diagnostics/lift_four_fingers_dr_success.gif`：seed=999，从保存的最终模型重新执行；中指末帧实际接触力 9.80N、无名指 17.02N，峰值抬升 6.67cm、最终抬升 5.22cm、最终 ADD 3.96mm；保持接触覆盖率 `[1,1,1,1,0]`。
+- 默认训练配置改为无 DR 四指配置，诊断/渲染默认也改为四指配置；论文原始 count 模式仍可显式指定旧配置。README 更新四指模型的评估与 GIF 命令。
+- 验收范围仍为第一次抬升和 1 秒保持；未将本次结果扩大解释为完整七次抓放或论文全部域随机化复现。
+- 旧三指与新四指模型/GIF 均保留，本次改善没有降低接触力或桌面安全判据，也没有直接移动动态苹果以伪造接触。
+- Git 关键节点本地提交 `ee221ec`（逐指奖励和姿态）、`412f22b`（逐指保持验收与近景 GIF）、`f394b0f`（鲁棒随机物理姿态）。远端仍未配置，无法推送。
+
+```bash
+# 新版无域随机化四指抬升 GIF
+.venv/bin/python scripts/render_lift.py \
+  --config configs/rl/wuji_hand2_apple_fingers.yaml \
+  --checkpoint outputs/rl/lift_fingers_v2/checkpoint-final.pt --seed 101 \
+  --output outputs/rl/diagnostics/lift_four_fingers_success.gif
+# 新版域随机化四指抬升 GIF
+.venv/bin/python scripts/render_lift.py \
+  --config configs/rl/wuji_hand2_apple_fingers_robust_dr.yaml \
+  --checkpoint outputs/rl/lift_fingers_robust_dr_v3/checkpoint-final.pt --seed 999 \
+  --output outputs/rl/diagnostics/lift_four_fingers_dr_success.gif
+```
