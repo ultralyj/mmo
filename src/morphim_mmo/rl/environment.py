@@ -630,6 +630,8 @@ class MorphometricResidualEnv(BaseEnv):
                 device=self.device,
             )
         )
+        self.agent.robot.set_root_linear_velocity(torch.zeros((len(env_idx), 3), device=self.device))
+        self.agent.robot.set_root_angular_velocity(torch.zeros((len(env_idx), 3), device=self.device))
         object_pose = self._object_pose_for_step(
             self._reference_step[env_idx], env_idx
         )
@@ -638,6 +640,10 @@ class MorphometricResidualEnv(BaseEnv):
                 p=object_pose[:, :3], q=object_pose[:, 3:]
             )
         )
+
+        # Pose reset does not clear dynamic-body momentum in SAPIEN.
+        self.object.set_linear_velocity(torch.zeros((len(env_idx), 3), device=self.device))
+        self.object.set_angular_velocity(torch.zeros((len(env_idx), 3), device=self.device))
 
     def _before_control_step(self) -> None:
         self._active_step = self._reference_step.clone()
@@ -696,6 +702,9 @@ class MorphometricResidualEnv(BaseEnv):
             self.scene.px.gpu_apply_articulation_root_velocity()
 
     def _after_control_step(self) -> None:
+        # BaseEnv fetches GPU state only after this hook; EMA must use this step.
+        if self.scene.gpu_sim_enabled:
+            self.scene._gpu_fetch_all()
         metrics = self._task_metrics(self._active_step)
         update_termination_state(
             self._termination_state,
