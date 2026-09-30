@@ -1,6 +1,7 @@
 """Search physical lift corrections while preserving reference finger identity."""
 import argparse
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import torch
@@ -9,11 +10,13 @@ from morphim_mmo.rl.config import load_residual_rl_config
 from morphim_mmo.rl.environment import MorphometricResidualEnv, ResidualActionWrapper, _grasp_bias_activation
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--config', default='configs/rl/wuji_hand2_apple.yaml')
 parser.add_argument('--rounds', type=int, default=35)
 parser.add_argument('--num-envs', type=int, default=512)
 parser.add_argument('--output', default='outputs/rl/diagnostics/cem_fingers.json')
 args = parser.parse_args()
-config = load_residual_rl_config('configs/rl/wuji_hand2_apple_fingers.yaml')
+config = load_residual_rl_config(args.config)
+config = replace(config, reward=replace(config.reward, contact_mode='per_finger', require_reference_contact=True))
 reference = load_reference(config)
 env = ResidualActionWrapper(MorphometricResidualEnv(reference=reference, config=config,
                          num_envs=args.num_envs, sim_backend='gpu'))

@@ -73,3 +73,11 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m morphim_mmo.cli.rl.
 - 新配置 `wuji_hand2_apple_fingers.yaml` 与 `wuji_hand2_apple_fingers_dr.yaml`；旧成功模型及 GIF 保留。
 - 环境新增每根手指实际接触力，评估输出逐指接触覆盖率；GIF 标注 T/I/M/R/P（拇指/食指/中指/无名指/小指），便于核实实际抓取。
 - 新的独立验收除抬升≥4cm外，要求保持阶段参考四指各≥90% 帧有接触、小指≤10% 帧接触；不再仅凭数量或末帧成功宣称接触恢复。
+
+### 四指策略阶段验收
+
+- 无 DR 模型 `outputs/rl/lift_fingers_v2/checkpoint-final.pt` 已重新训练 1,048,576 步。独立 seed=101、256 回合：抬升成功与严格保持阶段逐指匹配均 256/256；四指保持覆盖率 `[1,1,1,1,0]`。
+- 近景成功 GIF：`outputs/rl/diagnostics/lift_four_fingers_success.gif`。该 GIF 的中指末帧实际接触力 5.54N、无名指 15.13N，峰值抬升 6.42cm，保持后抬升 5.00cm，最终 ADD 6.63mm；对应 JSON 保存逐指接触覆盖率与力。
+- 全部测试 35 passed，包括同样接触数量但替换具体手指时奖励必须下降的回归测试。
+- 新四指姿态直接用于 DR 的零残差独立验收尚未通过：256 回合中严格通过仅 50，部分回合出现接触冲击超限。继续从无 DR 四指模型训练 DR，并用每候选 8 组随机物理场景进行鲁棒 CEM 搜索。
+- 240Hz 仿真及较软 PD 的三个对照没有改进当前 DR 零残差成功率，保留 120Hz 和原 PD 参数；不靠放宽安全阈值提升成功率。

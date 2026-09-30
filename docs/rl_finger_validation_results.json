@@ -1,0 +1,29 @@
+{
+  "deterministic": {
+    "seed": 101,
+    "episodes": 256,
+    "checkpoint": "outputs/rl/lift_fingers_v2/checkpoint-final.pt",
+    "config": "configs/rl/wuji_hand2_apple_fingers.yaml",
+    "success_rate": 1.0,
+    "strict_hold_finger_success_rate": 1.0,
+    "peak_lift_mean_m": 0.06429466596455313,
+    "final_lift_min_m": 0.04907159507274628,
+    "final_add_mean_m": 0.006556943326359033,
+    "maximum_contact_force_n": 16.893829345703125,
+    "finger_order": [
+      "thumb",
+      "index",
+      "middle",
+      "ring",
+      "pinky"
+    ],
+    "hold_contact_fraction_mean": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      0.0
+    ],
+    "checkpoint_sha256": "481bd687ae4d50b6de7d172c29cd5ca41cd7f926122049d8892224747261ede8"
+  }
+}
