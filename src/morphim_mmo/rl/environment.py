@@ -964,8 +964,9 @@ class ResidualActionWrapper(gym.Wrapper):
             self._residual_limits,
         )
         q_command = base_env.current_reference_qpos + residual
+        margin = base_env.config.control.joint_target_limit_margin_rad
         q_command = torch.clamp(
-            q_command, base_env._joint_lower, base_env._joint_upper
+            q_command, base_env._joint_lower + margin, base_env._joint_upper - margin
         )
         base_env._previous_qpos = base_env.agent.robot.get_qpos().clone()
         base_env._previous_action = q_command.clone()

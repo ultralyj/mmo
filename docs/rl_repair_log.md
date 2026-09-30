@@ -150,3 +150,12 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m morphim_mmo.cli.rl.
 - 小指原始 MMO 初始/过程姿态也可能与邻指相冲突，改为固定、温和弯曲的休息目标：MCP flex=0.4rad、abd=0.05rad、PIP=0.4rad、DIP=0.2rad；策略允许±0.05rad修正。小指不再被自由 CEM 搜索，且自碰撞保持启用。
 - GPU 实机加载检查：全部 4 个独立场景验证每关节 effort/velocity/armature、手部重力、逐对碰撞过滤以及小指动作边界；全部通过。
 - 安全搜索拒绝曾经触发过失败的轨迹，即便后续还能抬升也不当作成功。新增逐根指尖到对象网格的连续距离评分，减少稀疏接触搜索中的无效候选。
+
+### 新物理姿态的闭环复查
+
+- 选择配置 `wuji_hand2_apple_physical_grasp.yaml`，在已恢复重力、自碰撞与硬件驱动上限下重新搜索四指姿态；未借用旧不合理物理模型的策略权重。
+- 小指实际末帧 MCP flex/abd/PIP/DIP 约 0.410/0.057/0.402/0.200rad，最大 MCP flex 速度约0.635rad/s，小指不参与苹果接触。所有20轴实际速度均无超限，峰值约4.33rad/s。
+- 给目标位置加0.03rad限位余量后，逐1712物理子步 FCL 检查无非排除自穿透；最终抬升4.71cm。拇指CMC flex仍出现最大0.000559rad（0.032度）PhysX限位超调，明确保留测量值，不宣称数值上的绝对零超调。摘要 `docs/rl_physics_audit_repaired.json`，原始数据 `outputs/rl/diagnostics/physics_audit_margin03.json`。
+- 初次新姿态无DR批量128/128严格通过；这是调参姿态验证，不是最终PPO模型验证。目标余量之后从头训练新PPO，训练中暂时均成功，最终模型需独立验收。
+- 直接开启旧±20%物理与±5cm/±15度位姿随机化，严格验收仅13/256通过；旧模型512/512不可替代新物理验收。正在执行保留小指休息姿态、按8种随机物理取均值/最差值的鲁棒搜索。
+- GPU四场景检查在启用DR后仍通过逐轴effort、velocity、armature、重力、逐对碰撞过滤与小指动作边界。回归测试38通过。

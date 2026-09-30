@@ -13,6 +13,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--config', default='configs/rl/wuji_hand2_apple_physical_tuned.yaml')
 parser.add_argument('--rounds', type=int, default=30)
 parser.add_argument('--num-envs', type=int, default=256)
+parser.add_argument('--group-size', type=int, default=1)
+parser.add_argument('--start-at-zero', action='store_true')
 parser.add_argument('--output', default='outputs/rl/diagnostics/cem_physical_tuned.json')
 args = parser.parse_args()
 config = load_residual_rl_config(args.config)
@@ -29,6 +31,8 @@ pinky_indices = [i for i,n in enumerate(names) if "pinky" in n]
 initial_bias = torch.tensor([config.control.grasp_bias_by_joint[n] for n in names],device=base.device)
 mean = torch.zeros(23, device=base.device)
 mean[:20] = -.5 * initial_bias
+if args.start_at_zero:
+    mean.zero_()
 std = torch.full_like(mean, .3); std[20:] = .012
 std[pinky_indices] = 0
 best = mean.clone(); best_score = -float('inf'); history = []
@@ -39,7 +43,12 @@ def corrected_pose(step, env_idx=None):
     pose = original_base_pose(step, env_idx).clone()
     ids = base._env_ids if env_idx is None else env_idx
     if candidates is not None:
-        pose[:, :3] += gate[step, None] * candidates[ids, 20:]
+        correction = candidates[ids, 20:].clone()
+        yaw = base._yaw_offset[ids]
+        x, y = correction[:, 0].clone(), correction[:, 1].clone()
+        correction[:, 0] = x * torch.cos(yaw) - y * torch.sin(yaw)
+        correction[:, 1] = x * torch.sin(yaw) + y * torch.cos(yaw)
+        pose[:, :3] += gate[step, None] * correction
     return pose
 
 base._base_pose_for_step = corrected_pose
@@ -49,9 +58,13 @@ try:
     with torch.no_grad():
         for iteration in range(args.rounds):
             torch.manual_seed(300 + iteration)
-            candidates = mean + std * torch.randn(args.num_envs, 23, device=base.device)
+            candidate_count = args.num_envs // args.group_size
+            if args.num_envs % args.group_size:
+                raise ValueError('num-envs must be divisible by group-size')
+            candidates = (mean + std * torch.randn(candidate_count, 23, device=base.device)).repeat_interleave(args.group_size, dim=0)
             candidates[:, :20].clamp_(-.7, .7); candidates[:, 20:].clamp_(-.04, .04)
-            candidates[0] = best; candidates[1, :20] = -initial_bias
+            candidates[:args.group_size] = best
+            candidates[args.group_size:2*args.group_size] = 0
             candidates[:, pinky_indices] = 0
             env.reset(seed=1)
             score = torch.zeros(args.num_envs, device=base.device)
@@ -64,7 +77,8 @@ try:
             first_fail = torch.full((args.num_envs,), -1, dtype=torch.int64, device=base.device)
             reason_totals = {}
             for step in range(reference.frame_count):
-                q = (base.current_reference_qpos + gate[step] * candidates[:, :20]).clamp(base._joint_lower, base._joint_upper)
+                margin = config.control.joint_target_limit_margin_rad
+                q = (base.current_reference_qpos + gate[step] * candidates[:, :20]).clamp(base._joint_lower + margin, base._joint_upper - margin)
                 _, _, _, _, info = base.step(q)
                 first_fail = torch.where((first_fail < 0) & info['fail'], step, first_fail)
                 failed |= info['fail']
@@ -91,15 +105,22 @@ try:
                 score -= 2 * info['maximum_self_contact_force']
                 score -= .02 * (info['maximum_object_contact_force'] - 100).clamp_min(0)
             score -= 500 * failed.float()
-            elite = score.topk(max(8, args.num_envs // 10)).indices
-            mean = .2 * mean + .8 * candidates[elite].mean(0)
-            std = .2 * std + .8 * candidates[elite].std(0)
+            group_score = score.reshape(candidate_count, args.group_size)
+            robust_score = .5 * group_score.mean(-1) + .5 * group_score.amin(-1)
+            proposals = candidates[::args.group_size]
+            elite = robust_score.topk(max(8, candidate_count // 10)).indices
+            mean = .2 * mean + .8 * proposals[elite].mean(0)
+            std = .2 * std + .8 * proposals[elite].std(0)
             std[:20].clamp_min_(.025); std[20:].clamp_min_(.001)
             std[pinky_indices] = 0
-            index = int(score.argmax())
-            if float(score[index]) > best_score:
-                best_score = float(score[index]); best = candidates[index].clone()
-            row = dict(round=iteration, score=float(score[index]), best_score=best_score,
+            group_index = int(robust_score.argmax())
+            index = group_index * args.group_size
+            if float(robust_score[group_index]) > best_score:
+                best_score = float(robust_score[group_index]); best = candidates[index].clone()
+            row = dict(round=iteration, score=float(robust_score[group_index]), best_score=best_score,
+                       group_failures=int(failed[index:index+args.group_size].sum()),
+                       group_min_final_lift_m=float(info['object_lift'][index:index+args.group_size].min()),
+                       group_hold_contact_fraction=(coverage[index:index+args.group_size].mean(0) / 30).tolist(),
                        peak_lift_m=float(peak[index]), final_lift_m=float(info['object_lift'][index]),
                        final_add_m=float(info['add_error'][index]), max_force_n=float(max_force[index]),
                        failed=bool(failed[index]), first_failure_step=int(first_fail[index]), max_self_force_n=float(max_self_force[index]),

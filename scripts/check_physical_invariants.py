@@ -1,12 +1,16 @@
 """Verify actual loaded hardware and per-scene collision masks on GPU."""
 import itertools
+import argparse
 import numpy as np
 import torch
 from diagnose_lift import load_reference
 from morphim_mmo.rl.config import load_residual_rl_config
 from morphim_mmo.rl.environment import MorphometricResidualEnv, ResidualActionWrapper
 
-config = load_residual_rl_config('configs/rl/wuji_hand2_apple_physical_tuned.yaml')
+parser = argparse.ArgumentParser()
+parser.add_argument('--config', default='configs/rl/wuji_hand2_apple_physical_grasp.yaml')
+args = parser.parse_args()
+config = load_residual_rl_config(args.config)
 env = ResidualActionWrapper(MorphometricResidualEnv(reference=load_reference(config), config=config,
                                                   num_envs=4, sim_backend='gpu'))
 try:

@@ -55,6 +55,7 @@ class ControlConfig:
     asset_gain_scale: float = 1.0
     self_collisions: bool = False
     rate_limit_targets: bool = False
+    joint_target_limit_margin_rad: float = 0.0
     grasp_ramp_steps: int = 0
     inactive_finger_residual_limit_rad: float | None = None
     grasp_bias_by_joint: dict[str, float] | None = None
